@@ -102,6 +102,7 @@
 #include "applets/VectorMod.h"
 #include "applets/VectorMorph.h"
 #include "applets/Voltage.h"
+#include "applets/MarkoV.h"
 #ifdef PEWPEWPEW
 #include "applets/WTVCO.h"
 #endif
@@ -241,6 +242,7 @@ AppletRegistry reg{
     //DeclareApplet<VectorMod>{53, 0x01}, // awkward middle child
     DeclareApplet<VectorMorph>{54, 0x01},
     DeclareApplet<Voltage>{43, 0x10},
+    DeclareApplet<MarkoV>{93, 0x02},
 #ifdef PEWPEWPEW
     DeclareApplet<WTVCO>{67, 0x80},
 #endif
