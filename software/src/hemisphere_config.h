@@ -196,6 +196,7 @@ AppletRegistry reg{
 #ifdef __IMXRT1062__
     DeclareApplet<MidiLoop>{81, 0x20},
 #endif
+    DeclareApplet<MarkoV>{93, 0x02},
     DeclareApplet<hMIDIIn>{150, 0x20},
     DeclareApplet<hMIDIOut>{27, 0x20},
 #ifdef PEWPEWPEW
@@ -242,7 +243,6 @@ AppletRegistry reg{
     //DeclareApplet<VectorMod>{53, 0x01}, // awkward middle child
     DeclareApplet<VectorMorph>{54, 0x01},
     DeclareApplet<Voltage>{43, 0x10},
-    DeclareApplet<MarkoV>{93, 0x02},
 #ifdef PEWPEWPEW
     DeclareApplet<WTVCO>{67, 0x80},
 #endif

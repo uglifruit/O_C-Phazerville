@@ -2,100 +2,113 @@
 // First-order Markov chain over 8 scale degrees with Tendency Profiles.
 //
 // Digital 1: Clock — advance to next state
-// Digital 2: Reset — short press = root, long press = randomize state
-// CV 1: Chaos — 0V = pure profile weights, +V = flatten toward uniform
+// Digital 2: Reset — short press = return to seed state, long press = new random seed
+// CV 1: Chaos — offsets chaos_base upward (0V = pure profile, +V = flatter)
 // CV 2: Transpose — V/Oct offset added to output
 // Out A: Quantized pitch
-// Out B: Trigger pulse when state changes (pitch moves)
+// Out B: Trigger pulse when quantized pitch changes
 
-// Transition weight tables live outside the class to avoid C++ static
-// member definition issues across translation units.
 namespace MarkoVData {
 
 // profiles[profile][from_state][to_state]
-// Values are relative weights (higher = more probable).
+// Weights use 20:1 ratios so profiles sound clearly different.
+// At chaos=0 the dominant weights dominate hard; at chaos=100 all → 8 (flat).
 static const uint8_t profiles[3][8][8] = {
     // 0: Pentatonic Stability
-    // Strong gravitational pull toward root (0), fifth (4), and octave (7).
+    // Root(0) and fifth(4) are overwhelmingly preferred from any state.
+    // Octave(7) is a common arrival point. All other steps are rare.
     {
-        { 4, 2, 2, 1, 4, 1, 1, 3 }, // from 0 (root)
-        { 4, 1, 4, 1, 3, 1, 1, 1 }, // from 1 (2nd)
-        { 3, 1, 3, 1, 4, 1, 1, 2 }, // from 2 (3rd)
-        { 2, 1, 2, 2, 4, 2, 1, 1 }, // from 3 (4th)
-        { 4, 1, 2, 1, 4, 1, 1, 3 }, // from 4 (5th)
-        { 3, 1, 2, 1, 3, 2, 1, 2 }, // from 5 (6th)
-        { 4, 1, 1, 1, 3, 1, 1, 1 }, // from 6 (7th) — resolves to root
-        { 4, 2, 2, 1, 3, 1, 1, 2 }, // from 7 (oct) — falls back down
+        { 20,  2,  3,  1, 18,  1,  1,  8 }, // from 0 (root)
+        { 18,  2, 14,  1, 16,  1,  1,  3 }, // from 1 (2nd)
+        { 14,  1,  5,  1, 18,  1,  1,  6 }, // from 2 (3rd)
+        {  8,  1,  4,  2, 20,  3,  1,  2 }, // from 3 (4th)
+        { 20,  1,  3,  1, 18,  1,  1, 12 }, // from 4 (5th)
+        { 16,  1,  4,  1, 14,  2,  1,  8 }, // from 5 (6th)
+        { 20,  1,  2,  1, 12,  1,  1,  2 }, // from 6 (7th) — resolves to root
+        { 18,  3,  4,  1, 14,  1,  1,  5 }, // from 7 (oct) — falls back to root/5th
     },
     // 1: Chromatic Tension
-    // Strong preference for adjacent stepwise motion (±1 state).
+    // Stepwise motion dominates (±1 state). Repeating a note is common.
+    // Leaps are very rare, creating a snake-like melodic line.
     {
-        { 2, 8, 1, 1, 1, 1, 1, 2 }, // from 0
-        { 8, 2, 8, 1, 1, 1, 1, 1 }, // from 1
-        { 1, 8, 2, 8, 1, 1, 1, 1 }, // from 2
-        { 1, 1, 8, 2, 8, 1, 1, 1 }, // from 3
-        { 1, 1, 1, 8, 2, 8, 1, 1 }, // from 4
-        { 1, 1, 1, 1, 8, 2, 8, 1 }, // from 5
-        { 1, 1, 1, 1, 1, 8, 2, 8 }, // from 6
-        { 2, 1, 1, 1, 1, 1, 8, 2 }, // from 7
+        {  8, 20,  1,  1,  1,  1,  1,  4 }, // from 0
+        { 20,  8, 20,  1,  1,  1,  1,  1 }, // from 1
+        {  1, 20,  8, 20,  1,  1,  1,  1 }, // from 2
+        {  1,  1, 20,  8, 20,  1,  1,  1 }, // from 3
+        {  1,  1,  1, 20,  8, 20,  1,  1 }, // from 4
+        {  1,  1,  1,  1, 20,  8, 20,  1 }, // from 5
+        {  1,  1,  1,  1,  1, 20,  8, 20 }, // from 6
+        {  4,  1,  1,  1,  1,  1, 20,  8 }, // from 7
     },
     // 2: Jazz Tendencies
-    // Frequent leaps to the 7th, tritone pull from 4th, strong root resolution.
+    // Strong pull toward the 7th(6) from almost anywhere — the defining
+    // jazz gesture. Root resolution is strong from 6. Tritone sub from 3.
+    // Octave leaps and 3rd arrivals are common secondary moves.
     {
-        { 2, 1, 2, 1, 3, 1, 6, 2 }, // from 0 — leap to 7th
-        { 2, 1, 4, 1, 2, 1, 5, 2 }, // from 1 — go to 3rd or 7th
-        { 2, 1, 2, 1, 3, 1, 6, 2 }, // from 2 — leap to 7th
-        { 1, 1, 2, 1, 2, 1, 8, 2 }, // from 3 — tritone pull to 7th
-        { 3, 1, 2, 1, 2, 1, 4, 4 }, // from 4 — root or octave
-        { 2, 1, 3, 1, 2, 1, 5, 3 }, // from 5 — 3rd or 7th
-        { 6, 1, 2, 2, 2, 1, 2, 2 }, // from 6 — resolve to root
-        { 4, 1, 2, 1, 3, 1, 4, 2 }, // from 7 — fall back, leap to 7th
+        {  4,  1,  6,  1,  5,  1, 20,  4 }, // from 0 — leap to 7th
+        {  4,  1, 12,  1,  4,  1, 18,  4 }, // from 1 — 3rd or 7th
+        {  4,  1,  4,  1,  6,  1, 20,  4 }, // from 2 — leap to 7th
+        {  2,  1,  4,  1,  3,  1, 22,  4 }, // from 3 — tritone pull to 7th
+        { 10,  1,  4,  1,  4,  1, 14, 14 }, // from 4 — root or octave
+        {  4,  1,  8,  1,  4,  1, 18,  6 }, // from 5 — 3rd or 7th
+        { 22,  1,  4,  3,  5,  1,  4,  4 }, // from 6 — strong resolve to root
+        { 14,  1,  4,  1,  8,  1, 14,  4 }, // from 7 — fall back, leap to 7th
     },
 };
 
-static const char* const profile_names[3] = {
-    "Stability", "Tension", "Jazz"
-};
+static const char* const profile_names[3]  = { "S", "T", "J" };
+static const char* const cursor_labels[3]  = { "Matrix", "Scale", "Chaos" };
 
 } // namespace MarkoVData
 
 
 class MarkoV : public HemisphereApplet {
 public:
-    static constexpr int      NUM_STATES        = 8;
-    static constexpr int      NUM_PROFILES      = 3;
-    static constexpr int      HISTORY_SIZE      = 8;
-    static constexpr uint32_t LONG_PRESS_TICKS  = 5000;
-    // CV units per state step: ONE_OCTAVE / 7 spans root to octave in 8 steps
-    static constexpr int      STATE_CV_STEP     = ONE_OCTAVE / 7;
+    static constexpr int      NUM_STATES       = 8;
+    static constexpr int      NUM_PROFILES     = 3;
+    static constexpr int      HISTORY_SIZE     = 8;
+    static constexpr uint32_t LONG_PRESS_TICKS = 5000;
+    // CV units per state step: spans root to octave across 8 states
+    static constexpr int      STATE_CV_STEP    = ONE_OCTAVE / 7;
+
+    // Cursor positions
+    static constexpr int CURSOR_MATRIX = 0;
+    static constexpr int CURSOR_SCALE  = 1;
+    static constexpr int CURSOR_CHAOS  = 2;
+    static constexpr int CURSOR_LAST   = 2;
 
     const char* applet_name() { return "MarkoV"; }
 
     void Start() {
+        cursor       = 0;
         profile      = 0;
+        qselect      = io_offset;
+        chaos_base   = 0;
+        chaos_pct    = 0;
         state        = 0;
-        prev_state   = 0;
+        seed         = 0;
+        prev_cv      = 0;
         gate2_high   = false;
         gate2_ticks  = 0;
         randomized   = false;
-        chaos_pct    = 0;
         for (int i = 0; i < HISTORY_SIZE; i++) history[i] = 0;
         history_head = 0;
     }
 
     void Controller() {
-        // --- Digital In 2: short press = reset to root, long press = randomize ---
+        // --- Digital In 2: short press = return to seed, long press = new seed ---
         bool g2 = Gate(1);
         if (g2) {
             if (!gate2_high) gate2_high = true;
             gate2_ticks++;
             if (gate2_ticks >= LONG_PRESS_TICKS && !randomized) {
-                state      = random(NUM_STATES);
+                seed       = random(NUM_STATES);
+                state      = seed;
                 randomized = true;
             }
         } else if (gate2_high) {
             gate2_high = false;
-            if (!randomized) state = 0; // short press: return to root
+            if (!randomized) state = seed; // short press: return to seed
             randomized  = false;
             gate2_ticks = 0;
         }
@@ -104,23 +117,27 @@ public:
         if (Clock(0)) StartADCLag(0);
 
         if (EndOfADCLag(0)) {
-            // CV 1: Chaos — scale to 0-256 integer (fixed-point, no floats)
-            int cv1   = constrain(In(0), 0, HEMISPHERE_MAX_INPUT_CV);
-            int chaos = Proportion(cv1, HEMISPHERE_MAX_INPUT_CV, 256);
-            chaos_pct = Proportion(cv1, HEMISPHERE_MAX_INPUT_CV, 100);
+            // CV 1: Chaos — adds to chaos_base, clamped to 0-100
+            int cv1      = constrain(In(0), 0, HEMISPHERE_MAX_INPUT_CV);
+            int cv_chaos = Proportion(cv1, HEMISPHERE_MAX_INPUT_CV, 100);
+            chaos_pct    = constrain(chaos_base + cv_chaos, 0, 100);
+
+            // Map chaos_pct (0-100) to fixed-point 0-256 for NextState
+            int chaos    = (chaos_pct * 256) / 100;
 
             // CV 2: Transpose (V/Oct raw value)
             int transpose = In(1);
 
             // Advance the Markov chain
-            prev_state = state;
-            state      = NextState(state, chaos);
+            state = NextState(state, chaos);
 
-            // Output A: quantized pitch + V/Oct transpose
-            Out(0, Quantize(0, state * STATE_CV_STEP) + transpose);
+            // Output A: quantize through user-selected quantizer + V/Oct transpose
+            int cv_out = HS::Quantize(qselect, state * STATE_CV_STEP) + transpose;
+            Out(0, cv_out);
 
-            // Output B: trigger only when state (pitch) changed
-            if (state != prev_state) ClockOut(1);
+            // Output B: trigger only when the quantized pitch actually changes
+            if (cv_out != prev_cv) ClockOut(1);
+            prev_cv = cv_out;
 
             // Update scrolling note history
             history[history_head] = state;
@@ -129,22 +146,32 @@ public:
     }
 
     void View() {
-        // Profile name — encoder adjusts this directly
-        gfxPrint(0, 15, MarkoVData::profile_names[profile]);
+        // --- Header: cursor parameter name (replaces applet name while navigating) ---
+        gfxPrint(0, 6, MarkoVData::cursor_labels[cursor]);
 
-        // Chaos % — right-aligned on the same row
-        gfxPos(40, 15);
-        graphics.printf("C:%d%%", chaos_pct);
+        // --- Parameter line (y=15) ---
+        gfxPrint(1,  15, MarkoVData::profile_names[profile]);
+        gfxPrint(18, 15, "Q");
+        gfxPrint(qselect + 1);
+        gfxPos(36, 15);
+        graphics.printf("%d%%", chaos_pct);
+
+        // Cursor underline — spicy (dotted) for Scale to hint at Aux edit
+        switch (cursor) {
+            case CURSOR_MATRIX: gfxCursor(1,  23, 7);  break;
+            case CURSOR_SCALE:  gfxSpicyCursor(18, 23, 13); break;
+            case CURSOR_CHAOS:  gfxCursor(36, 23, 22); break;
+        }
 
         // Separator
-        gfxLine(0, 24, 63, 24);
+        gfxLine(0, 25, 63, 25);
 
-        // Scrolling bar graph: oldest note on left, newest on right.
-        // history_head points to the next write slot = the oldest entry.
+        // --- Scrolling bar graph ---
+        // history_head points to the next write slot = oldest entry
         const int GRAPH_BOTTOM = 62;
-        const int GRAPH_H      = 36; // available height in pixels
+        const int GRAPH_H      = 35;
         const int BAR_W        = 6;
-        const int BAR_STRIDE   = 8;  // 8 bars × 8px = 64px
+        const int BAR_STRIDE   = 8;
 
         for (int i = 0; i < HISTORY_SIZE; i++) {
             int idx   = (history_head + i) % HISTORY_SIZE;
@@ -154,71 +181,95 @@ public:
             gfxRect(x, GRAPH_BOTTOM - bar_h + 1, BAR_W, bar_h);
         }
 
-        // Baseline
         gfxLine(0, GRAPH_BOTTOM + 1, 63, GRAPH_BOTTOM + 1);
     }
 
     void OnEncoderMove(int direction) {
-        profile = constrain(profile + direction, 0, NUM_PROFILES - 1);
+        if (!EditMode()) {
+            MoveCursor(cursor, direction, CURSOR_LAST);
+            return;
+        }
+        switch (cursor) {
+            case CURSOR_MATRIX:
+                profile = constrain(profile + direction, 0, NUM_PROFILES - 1);
+                break;
+            case CURSOR_SCALE:
+                qselect = constrain(qselect + direction, 0, QUANT_CHANNEL_COUNT - 1);
+                HS::qview = qselect;
+                HS::PokePopup(QUANTIZER_POPUP);
+                break;
+            case CURSOR_CHAOS:
+                chaos_base = constrain((int)chaos_base + direction, 0, 100);
+                break;
+        }
     }
 
     void AuxButton() {
-        // Open the quantizer editor for this hemisphere's channel
-        HS::QuantizerEdit(io_offset);
+        if (cursor == CURSOR_SCALE) {
+            HS::QuantizerEdit(qselect);
+        }
         CancelEdit();
     }
 
     uint64_t OnDataRequest() {
         uint64_t data = 0;
-        Pack(data, PackLocation{0, 2}, profile);
-        Pack(data, PackLocation{2, 3}, state);
+        Pack(data, PackLocation{0,  2}, profile);
+        Pack(data, PackLocation{2,  3}, state);
+        Pack(data, PackLocation{5,  2}, qselect);
+        Pack(data, PackLocation{7,  7}, chaos_base);
+        Pack(data, PackLocation{14, 3}, seed);
         return data;
     }
 
     void OnDataReceive(uint64_t data) {
-        profile = constrain((int)Unpack(data, PackLocation{0, 2}), 0, NUM_PROFILES - 1);
-        state   = constrain((int)Unpack(data, PackLocation{2, 3}), 0, NUM_STATES - 1);
+        profile    = constrain((int)Unpack(data, PackLocation{0,  2}), 0, NUM_PROFILES - 1);
+        state      = constrain((int)Unpack(data, PackLocation{2,  3}), 0, NUM_STATES - 1);
+        qselect    = constrain((int)Unpack(data, PackLocation{5,  2}), 0, QUANT_CHANNEL_COUNT - 1);
+        chaos_base = constrain((int)Unpack(data, PackLocation{7,  7}), 0, 100);
+        seed       = constrain((int)Unpack(data, PackLocation{14, 3}), 0, NUM_STATES - 1);
     }
 
 protected:
     void SetHelp() {
         help[HELP_DIGITAL1] = "Clock";
-        help[HELP_DIGITAL2] = "Rst/Rnd";
-        help[HELP_CV1]      = "Chaos";
+        help[HELP_DIGITAL2] = "Rst/Seed";
+        help[HELP_CV1]      = "Chaos+";
         help[HELP_CV2]      = "Transp";
         help[HELP_OUT1]     = "Pitch";
         help[HELP_OUT2]     = "Trigger";
-        help[HELP_EXTRA1]   = "Enc:Profil";
-        help[HELP_EXTRA2]   = "Aux:Q Edit";
+        help[HELP_EXTRA1]   = "Enc:Params";
+        help[HELP_EXTRA2]   = "Aux:QEdit";
     }
 
 private:
+    uint8_t  cursor;
     uint8_t  profile;
+    uint8_t  qselect;      // absolute quantizer channel
+    uint8_t  chaos_base;   // encoder-set baseline chaos 0-100
+    int      chaos_pct;    // live chaos (base + CV) for display
     uint8_t  state;
-    uint8_t  prev_state;
+    uint8_t  seed;         // state reset returns here; long press sets new seed
+    int      prev_cv;      // last quantized CV output, for trigger comparison
     uint8_t  history[HISTORY_SIZE];
     uint8_t  history_head;
     bool     gate2_high;
     uint32_t gate2_ticks;
     bool     randomized;
-    int      chaos_pct;   // cached chaos level as 0-100% for display
 
-    // Compute the next Markov state given the current state and chaos level.
-    // chaos is 0-256 (fixed-point fraction of 256).
-    // chaos=0   → pure profile weights
-    // chaos=256 → flat uniform distribution (all weights = 8)
-    // Interpolation: w = (pw * (256 - chaos) + 8 * chaos) >> 8
-    // Max intermediate value: 8 * 256 = 2048 — fits in int, no floats needed.
+    // Advance the Markov chain.
+    // chaos: 0-256 fixed-point (0=pure profile weights, 256=flat/uniform)
+    // w[j] = (profile_weight[j] * (256-chaos) + 8 * chaos) >> 8
+    // Max intermediate: 22 * 256 = 5632 — integer only, no floats.
     int NextState(uint8_t from, int chaos) {
         int weights[NUM_STATES];
-        int total         = 0;
-        int inv_chaos     = 256 - chaos;
+        int total     = 0;
+        int inv_chaos = 256 - chaos;
 
         for (int j = 0; j < NUM_STATES; j++) {
-            int pw       = MarkoVData::profiles[profile][from][j];
-            int w        = (pw * inv_chaos + 8 * chaos) >> 8;
-            weights[j]   = max(1, w);
-            total       += weights[j];
+            int pw     = MarkoVData::profiles[profile][from][j];
+            int w      = (pw * inv_chaos + 8 * chaos) >> 8;
+            weights[j] = max(1, w);
+            total     += weights[j];
         }
 
         int r   = random(total);
