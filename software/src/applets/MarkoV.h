@@ -13,7 +13,7 @@ namespace MarkoVData {
 // profiles[profile][from_state][to_state]
 // Weights use 20:1 ratios so profiles sound clearly different.
 // At chaos=0 the dominant weights dominate hard; at chaos=100 all → 8 (flat).
-static const uint8_t profiles[4][8][8] = {
+static const uint8_t profiles[5][8][8] = {
     // 0: Pentatonic Stability
     // Root(0) and fifth(4) are overwhelmingly preferred from any state.
     // Octave(7) is a common arrival point. All other steps are rare.
@@ -67,9 +67,23 @@ static const uint8_t profiles[4][8][8] = {
         { 14,  1,  1,  1,  4,  8, 16,  6 }, // from 6 (7th resolves to root)
         { 12,  1,  1,  1,  8,  1,  6, 18 }, // from 7 (oct)
     },
+    // 4: Drone
+    // Overwhelming self-loop weight (~83%). No attractors.
+    // The note barely ever changes — Out B stays silent unless chaos is raised.
+    // Adjacent ±1 steps are the only realistic escape.
+    {
+        { 40,  2,  1,  1,  1,  1,  1,  1 }, // from 0 (root)
+        {  2, 40,  2,  1,  1,  1,  1,  1 }, // from 1
+        {  1,  2, 40,  2,  1,  1,  1,  1 }, // from 2
+        {  1,  1,  2, 40,  2,  1,  1,  1 }, // from 3
+        {  1,  1,  1,  2, 40,  2,  1,  1 }, // from 4
+        {  1,  1,  1,  1,  2, 40,  2,  1 }, // from 5
+        {  1,  1,  1,  1,  1,  2, 40,  2 }, // from 6
+        {  1,  1,  1,  1,  1,  1,  2, 40 }, // from 7 (oct)
+    },
 };
 
-static const char* const profile_names[4]  = { "S", "T", "J", "G" };
+static const char* const profile_names[5]  = { "S", "T", "J", "G", "D" };
 static const char* const cursor_labels[4]  = { "Matrix", "Scale", "Chaos", "Seed" };
 
 } // namespace MarkoVData
@@ -78,7 +92,7 @@ static const char* const cursor_labels[4]  = { "Matrix", "Scale", "Chaos", "Seed
 class MarkoV : public HemisphereApplet {
 public:
     static constexpr int      NUM_STATES       = 8;
-    static constexpr int      NUM_PROFILES     = 4;
+    static constexpr int      NUM_PROFILES     = 5;
     static constexpr int      HISTORY_SIZE     = 8;
     static constexpr uint32_t LONG_PRESS_TICKS = 5000;
     // CV units per state step: spans root to octave across 8 states
@@ -269,22 +283,22 @@ public:
 
     uint64_t OnDataRequest() {
         uint64_t data = 0;
-        Pack(data, PackLocation{0,  2}, profile);
-        Pack(data, PackLocation{2,  3}, state);
-        Pack(data, PackLocation{5,  2}, qselect);
-        Pack(data, PackLocation{7,  7}, chaos_base);
-        Pack(data, PackLocation{14, 3}, seed);
-        Pack(data, PackLocation{17, 32}, rng_seed);
+        Pack(data, PackLocation{0,  3}, profile);    // 3 bits for 5 profiles
+        Pack(data, PackLocation{3,  3}, state);
+        Pack(data, PackLocation{6,  2}, qselect);
+        Pack(data, PackLocation{8,  7}, chaos_base);
+        Pack(data, PackLocation{15, 3}, seed);
+        Pack(data, PackLocation{18, 32}, rng_seed);
         return data;
     }
 
     void OnDataReceive(uint64_t data) {
-        profile    = constrain((int)Unpack(data, PackLocation{0,  2}), 0, NUM_PROFILES - 1);
-        state      = constrain((int)Unpack(data, PackLocation{2,  3}), 0, NUM_STATES - 1);
-        qselect    = constrain((int)Unpack(data, PackLocation{5,  2}), 0, QUANT_CHANNEL_COUNT - 1);
-        chaos_base = constrain((int)Unpack(data, PackLocation{7,  7}), 0, 100);
-        seed       = constrain((int)Unpack(data, PackLocation{14, 3}), 0, NUM_STATES - 1);
-        rng_seed   = (uint32_t)Unpack(data, PackLocation{17, 32});
+        profile    = constrain((int)Unpack(data, PackLocation{0,  3}), 0, NUM_PROFILES - 1);
+        state      = constrain((int)Unpack(data, PackLocation{3,  3}), 0, NUM_STATES - 1);
+        qselect    = constrain((int)Unpack(data, PackLocation{6,  2}), 0, QUANT_CHANNEL_COUNT - 1);
+        chaos_base = constrain((int)Unpack(data, PackLocation{8,  7}), 0, 100);
+        seed       = constrain((int)Unpack(data, PackLocation{15, 3}), 0, NUM_STATES - 1);
+        rng_seed   = (uint32_t)Unpack(data, PackLocation{18, 32});
     }
 
 protected:

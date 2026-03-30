@@ -38,7 +38,7 @@ The key quality is *stylistic coherence without a loop*: the chain gravitates to
 
 **CV 1 (Chaos offset):** Adds to the encoder-set Chaos baseline. When nothing is patched and the source is set to None, it has no effect. If the source is set to a channel with nothing plugged in, the floating ADC input may read high and push Chaos toward 100% — set CV 1 source to **None** when not using it.
 
-**CV 2 (Transpose):** Raw V/Oct offset added after quantization. Patch a sequencer here to transpose the entire Markov melody between keys in real time.
+**CV 2 (Transpose):** Raw V/Oct offset added after quantization. The trigger comparison is made before transpose is applied, so CV 2 jitter does not cause spurious triggers. Patch a sequencer here to transpose the entire Markov melody between keys in real time.
 
 ---
 
@@ -48,7 +48,7 @@ Four parameters, navigated by the encoder (rotate to move cursor, press to enter
 
 | Cursor | Parameter | Range | Notes |
 |--------|-----------|-------|-------|
-| **Matrix** | Tendency profile | S / T / J / G | Sets the transition weight table |
+| **Matrix** | Tendency profile | S / T / J / G / D | Sets the transition weight table |
 | **Scale** | Quantizer channel | Q1–Q4 | Selects which global quantizer to use |
 | **Chaos** | Randomisation | 0–100% | Blends weights toward flat/uniform |
 | **Seed** | Loop anchor | — | Dice icon; controls the deterministic reset point |
@@ -71,7 +71,7 @@ CV 1 adds to the encoder-set baseline, so you can set a floor with the encoder a
 
 ---
 
-## The Four Profiles (Transition Matrices)
+## The Five Profiles (Transition Matrices)
 
 Each profile is an 8×8 weight table. The **row** is the current state (where you are now); the **column** is a possible next state (where you might go). Higher numbers mean more likely. At Chaos=0 these weights are followed closely; at Chaos=100 they are ignored entirely.
 
@@ -87,7 +87,7 @@ Produces melodies that orbit the root and fifth — characteristic of folk, moda
 
 Stepwise motion dominates: from any position the most likely moves are ±1 state, with the current note also common (repetition). Leaps are very rare. The chain produces snake-like lines that creep up or down through the range.
 
-Works well when the quantizer includes close intervals (chromatic, whole-tone). With a sparse scale the steps become larger intervals, which creates a different kind of directed crawl. Add Chaos to occasionally break out of the current direction of travel.
+Works well when the quantizer includes close intervals (chromatic, whole-tone). With a sparse scale the steps become larger intervals. Add Chaos to occasionally break out of the current direction of travel.
 
 ### J — Jazz Tendencies
 
@@ -97,9 +97,17 @@ Secondary tendencies include the 3rd (state 2) as a common secondary arrival and
 
 ### G — Glacial
 
-Very heavy self-loops: staying on the current note is the most probable move. When the chain does move, only adjacent steps (±1) are possible — leaps are essentially eliminated. Root and fifth remain as attractors when movement finally occurs.
+Very heavy self-loops: staying on the current note is the most probable move (~40–50%). When the chain does move, only adjacent steps (±1) are possible — leaps are essentially eliminated. Root and fifth remain as attractors when movement finally occurs.
 
-Suited to very slow clocks and long sustained notes. The chain drifts minimally through a scale, changing direction only rarely. Adding Chaos is particularly effective here — it breaks the self-loops and introduces movement while still preventing leaps, creating a sense of slow thaw.
+Suited to very slow clocks and long sustained notes. The chain drifts minimally through a scale, changing direction only rarely. Adding Chaos is particularly effective here — it breaks the self-loops and introduces movement while still preventing leaps.
+
+### D — Drone
+
+The strongest self-loops of any profile: ~83% probability of staying on the current note. No attractors — the chain has no pull toward root, fifth, or any other degree. The only meaningful escapes are ±1 steps, and even these are rare.
+
+**Out B will stay silent for long stretches at Chaos=0.** The note is locked in place. This profile is intended for use with CV 1 Chaos as the primary performance control: at low Chaos you get a sustained drone; sweeping Chaos upward gradually introduces movement and triggers. The transition from silence to occasional movement to active melody all happens within the Chaos range.
+
+Patch an envelope or LFO into CV 1 to animate the drone into life at musical moments, then let it settle back to stillness.
 
 ---
 
@@ -108,16 +116,16 @@ Suited to very slow clocks and long sustained notes. The chain drifts minimally 
 The seed system gives you a deterministic loop anchor. Two values are stored: the **start state** (which scale degree to return to) and an **RNG seed** (the seed for the random number generator). Because resetting the RNG seed replays the same random number sequence, a short-press reset reproduces the *exact same note sequence* every time.
 
 ### Short press on Digital 2 — Replay loop
-Resets the RNG to the stored seed and returns to the start state. The parameter row briefly inverts (~500ms) to confirm. The chain will now play the identical sequence of notes it played after the last seed was set.
+Resets the RNG to the stored seed and returns to the start state. The dice icon briefly inverts (~170ms) to confirm. The chain will now play the identical sequence of notes it played after the last seed was set.
 
 ### Long press on Digital 2 (~3 seconds) — New seed
-Generates a new start state and a new RNG seed from the current time. From this moment on, short press replays *this* new loop. Use this in performance to commit to a new phrase.
+Generates a new start state and a new RNG seed from the current time. From this moment on, short press replays *this* new loop.
 
 ### Encoder on Seed cursor — Re-roll
 Rotating the encoder immediately rolls a new seed. You do not need to click out — keep rotating to keep rolling until you find something you like. The dice icon shifts up one pixel briefly to confirm each roll.
 
 ### Aux on Seed cursor — Re-roll
-Same as rotating the encoder: generates a new seed and jumps to it.
+Same as rotating the encoder on Seed: generates a new seed and jumps to it.
 
 **Performance workflow:** let the chain run freely → hear something you like → short press Digital 2 to lock in that loop → use long press or encoder re-roll to move to a new loop at the next section.
 
@@ -140,7 +148,8 @@ The bar graph shows the last 8 states. Bar height represents scale degree — st
 ## Tips
 
 - **Out B as rhythmic gate:** Dense scales produce more frequent triggers (more unique pitches); sparse pentatonic scales create natural rests. The trigger rhythm is an emergent property of scale plus profile.
-- **Glacial + slow clock + reverb:** Very long note durations with minimal movement. Works well as a background drone that slowly evolves.
+- **D profile + Chaos CV:** Use D as a drone with CV 1 controlling how much movement occurs. An envelope triggered by a performance event can sweep Chaos up and back, briefly animating the drone into a melodic phrase.
+- **Glacial + slow clock + reverb:** Long note durations with minimal movement. Works well as a background drone that slowly evolves.
 - **Jazz profile + Dorian or Mixolydian:** The 7th-degree pull takes on very different character depending on whether the 7th is major or minor. Mixolydian gives a bluesy dominant-7th feel; Dorian gives a cooler, more ambiguous tension.
 - **Chaos as a performance arc:** Start at 0% and gradually increase over a long section to move from composed tendency to free randomness, then snap back with a seed reset.
 - **Pair with MarkovPerc:** Run both from the same clock. MarkovPerc drives rhythm and accent; MarkoV drives pitch. The profile names (S/T/J) are intentionally parallel — matching moods on both creates coherent ensemble textures.
