@@ -105,24 +105,31 @@ io_offset                      // hemisphere's base channel offset (0 or 2)
 **Registry ID:** 93, category `0x02` (Sequencer)
 
 ### Concept
-First-order Markov chain melodic generator. 8 states represent scale degrees. On each clock, the next state is chosen by weighted random selection from the current row of a transition matrix. Three profiles define the matrix weights.
+First-order Markov chain melodic generator. 8 states represent scale degrees. On each clock, the next state is chosen by weighted random selection from the current row of a transition matrix. Four profiles define the matrix weights.
 
 ### I/O
 | Jack | Function |
 |------|---------|
 | Dig 1 | Clock — advances the chain |
-| Dig 2 | Reset — short press = root (state 0), long press (5000 ticks) = random state |
+| Dig 2 | Reset — short press = replay from seed (same RNG sequence), long press (5000 ticks) = new random seed |
 | CV 1 | Chaos offset — adds to encoder-set chaos_base; higher V = flatter distribution |
 | CV 2 | Transpose — raw V/Oct offset added after quantization |
 | Out A | Quantized pitch |
 | Out B | Trigger pulse — fires only when quantized pitch actually changes |
 
-### Parameters (encoder-navigated, 3 cursors)
+### Parameters (encoder-navigated, 4 cursors)
 | Cursor | Param | Range | Notes |
 |--------|-------|-------|-------|
-| 0 | Matrix | S / T / J | Pentatonic Stability, Chromatic Tension, Jazz |
+| 0 | Matrix | S / T / J / G | Stability, Tension, Jazz, Glacial |
 | 1 | Scale | Q1–Q4 | Absolute quantizer channel; Aux opens editor |
 | 2 | Chaos | 0–100% | Baseline; CV 1 adds on top |
+| 3 | Seed | — | Dice icon; encoder re-rolls, Aux re-rolls; Dig 2 short resets to seed |
+
+### Profiles
+- **S** Pentatonic Stability — root/fifth attractors, 20:1 weight ratios
+- **T** Chromatic Tension — stepwise motion dominates, snake-like lines
+- **J** Jazz — strong pull to 7th from everywhere, root resolution from 7th
+- **G** Glacial — heavy self-loops (~50%), only ±1 movement, near-zero leaps
 
 ### Chaos Implementation
 Integer fixed-point only (no floats in hot path):
@@ -131,23 +138,25 @@ chaos_256 = (chaos_pct * 256) / 100
 w[j] = (profile_weight[j] * (256 - chaos_256) + 8 * chaos_256) >> 8
 ```
 At chaos=0: pure profile weights. At chaos=100: all weights = 8 (uniform).
-Profile weights use 20:1 ratios (max 22, min 1) so profiles are clearly audible.
 
 ### Trigger Logic
 Output B compares the **quantized CV value** (`prev_cv`) not the raw Markov state. Two different states that quantize to the same pitch will not fire a trigger.
 
-### Reset & Seed
-- Short press Dig 2 → return to `seed` state (repeatable reset point)
-- Long press Dig 2 (≥5000 ticks) → pick new `random(NUM_STATES)`, store as `seed`
-- Seed is persisted in `OnDataRequest`
+### Seed & Reset
+- `seed` = start state; `rng_seed` = RNG seed for deterministic sequence
+- Short press Dig 2 → `randomSeed(rng_seed); state = seed` — identical replay
+- Long press Dig 2 (≥5000 ticks) → new `rng_seed` + `seed`, locks new loop
+- Encoder on Seed cursor → re-rolls immediately, flashes dice icon ~500ms
+- Aux on Seed cursor → same as long press
+- reset_flash (~500ms invert of param row) fires on short Dig 2
 
 ### Display Layout
 ```
-Matrix                ← cursor label at top (y=6): "Matrix", "Scale", or "Chaos"
-[S]  [Q1]  [42%]     ← param line (y=15), cursor underlines below (y=23)
-─────────────────     ← separator (y=25)
-█  ██ █  ██ █  ██    ← scrolling bar graph, 8 bars, oldest→newest left→right
-─────────────────     ← baseline (y=63)
+                [Seed]   ← hint text right-justified at y=2, EditMode only
+[S] [Q1] [42%] [dice]   ← param line y=15: profile@1, scale@10, chaos@25, dice@54
+──────────────────────   ← separator y=25
+█  ██ █  ██ █  ██  █    ← scrolling bar graph, 8 bars, oldest→newest left→right
+──────────────────────   ← baseline y=63
 ```
 
 ### Registry Position
@@ -161,6 +170,86 @@ Placed between MidiLoop and hMIDIIn in hemisphere_config.h (alphabetical M secti
 | 5–6 | qselect | 2 |
 | 7–13 | chaos_base | 7 |
 | 14–16 | seed | 3 |
+| 17–48 | rng_seed | 32 |
+
+## MarkovPerc Applet
+**File:** `software/src/applets/MarkovPerc.h`
+**Branch:** `MarkovPerc`
+**Registry ID:** 94, category `0x02` (Sequencer)
+
+### Concept
+Rhythmic sibling to MarkoV. States are hit types (REST, HIT, ACC_HIT, FLAM, ACC_FLAM, RATCHET_2/3/4). A Markov chain chooses the next hit pattern, creating a drummer with evolving style and internal memory. Four profiles define the matrix weights.
+
+### I/O
+| Jack | Function |
+|------|---------|
+| Dig 1 | Clock — advances the chain |
+| Dig 2 | Reset — short press = replay from seed (same RNG sequence), long press (5000 ticks) = new seed |
+| CV 1 | Chaos — flattens transition distribution (more erratic fills) |
+| CV 2 | Density — biases toward hits vs rests (positive V = more hits) |
+| Out A | Trigger — fires sub-triggers for ratchets/flams within the beat |
+| Out B | Accent CV — 0–5V held for full clock period; level = beat accent of current state |
+
+### Parameters (encoder-navigated, 3 cursors)
+| Cursor | Param | Range | Notes |
+|--------|-------|-------|-------|
+| 0 | Matrix | S / T / J / P | Steady, Syncopated, Jazz, Sparse |
+| 1 | Chaos | 0–100% | Baseline; CV 1 adds on top |
+| 2 | Seed | — | Dice icon; encoder re-rolls, Aux re-rolls; Dig 2 short resets to seed |
+
+### Profiles
+- **S** Steady (Rock/Pop) — gravitates to hits/accented hits, rests brief, ratchets rare
+- **T** Syncopated (Funk/Latin) — rests structurally meaningful, flams very common, ratchet_2 frequent
+- **J** Jazz/Free — ratchets common fills, accented flams signature, extended rests then dense bursts
+- **P** Sparse — heavy REST self-loops, single hits only, ratchets/flams essentially absent
+
+### Hit States & Accent Levels
+| State | Triggers | Out B |
+|-------|----------|-------|
+| REST | none | 0V |
+| HIT | 1 | ~2V (ACCENT_SOFT) |
+| ACC_HIT | 1 | ~5V (ACCENT_FULL) |
+| FLAM | 2 (grace + main) | ~3V (ACCENT_MED) |
+| ACC_FLAM | 2 (grace + accented main) | ~5V (ACCENT_FULL) |
+| RATCHET_2 | 2 evenly spaced | ~4V (ACCENT_HARD) |
+| RATCHET_3 | 3 evenly spaced | ~3V (ACCENT_MED) |
+| RATCHET_4 | 4 evenly spaced | ~2V (ACCENT_SOFT) |
+
+Out B is set once per beat at the beat's accent level and held for the full clock period.
+
+### Chaos & Density Implementation
+Integer fixed-point, no floats:
+```
+chaos: blends profile weights toward flat (8) — same formula as MarkoV
+density: scales REST weight inversely, hit weights directly
+  REST:  w = (w * (256 - density)) >> 7   // density=128 → neutral
+  hits:  w = (w * (128 + density/2)) >> 7
+```
+
+### Display Layout
+```
+                 [Seed]  ← hint text right-justified y=2, EditMode only
+[S]    [42%]   [dice]   ← param line y=15: profile@1, chaos@22, dice@54
+──────────────────────   ← separator y=25
+[bar graph — height = accent level, horizontal bands for ratchets/flams]
+──────────────────────   ← baseline
+```
+Bar graph: height proportional to accent level (0–5), horizontal bands subdivide bar for multi-trigger states (2 bands for flam/ratchet_2, 3 for ratchet_3, 4 for ratchet_4).
+
+### Seed & Reset
+Same mechanism as MarkoV — `seed` + `rng_seed` pair. Dig 2 short press triggers reset_flash (~500ms invert of param row).
+
+### Registry Position
+Placed after MarkoV in hemisphere_config.h (alphabetical M section).
+
+### Data Persistence (OnDataRequest bit layout)
+| Bits | Field | Width |
+|------|-------|-------|
+| 0–1 | profile | 2 |
+| 2–4 | hit_state | 3 |
+| 5–11 | chaos_base | 7 |
+| 12–14 | seed | 3 |
+| 15–46 | rng_seed | 32 |
 
 ## UgliApp Applet
 **File:** `software/src/applets/UgliApp.h`
