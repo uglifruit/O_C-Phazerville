@@ -2,7 +2,7 @@
 // First-order Markov chain over 8 scale degrees with Tendency Profiles.
 //
 // Digital 1: Clock — advance to next state
-// Digital 2: Reset — short press = return to seed state, long press = new random seed
+// Digital 2: Reset — short press = replay from seed (same RNG sequence), long press = new random seed
 // CV 1: Chaos — offsets chaos_base upward (0V = pure profile, +V = flatter)
 // CV 2: Transpose — V/Oct offset added to output
 // Out A: Quantized pitch
@@ -13,7 +13,7 @@ namespace MarkoVData {
 // profiles[profile][from_state][to_state]
 // Weights use 20:1 ratios so profiles sound clearly different.
 // At chaos=0 the dominant weights dominate hard; at chaos=100 all → 8 (flat).
-static const uint8_t profiles[3][8][8] = {
+static const uint8_t profiles[4][8][8] = {
     // 0: Pentatonic Stability
     // Root(0) and fifth(4) are overwhelmingly preferred from any state.
     // Octave(7) is a common arrival point. All other steps are rare.
@@ -54,10 +54,23 @@ static const uint8_t profiles[3][8][8] = {
         { 22,  1,  4,  3,  5,  1,  4,  4 }, // from 6 — strong resolve to root
         { 14,  1,  4,  1,  8,  1, 14,  4 }, // from 7 — fall back, leap to 7th
     },
+    // 3: Glacial
+    // Stays on current note most of the time. Only adjacent steps are possible moves.
+    // Root and fifth are the only attractors; all leaps are nearly impossible.
+    {
+        { 20, 10,  1,  1, 10,  1,  1,  4 }, // from 0 (root)
+        { 14, 18, 10,  1,  4,  1,  1,  1 }, // from 1
+        {  8, 10, 18, 10,  4,  1,  1,  1 }, // from 2
+        {  6,  1, 10, 18, 10,  1,  1,  1 }, // from 3
+        { 12,  1,  1, 10, 20,  8,  1,  1 }, // from 4 (fifth)
+        {  6,  1,  1,  1,  8, 18, 10,  1 }, // from 5
+        { 14,  1,  1,  1,  4,  8, 16,  6 }, // from 6 (7th resolves to root)
+        { 12,  1,  1,  1,  8,  1,  6, 18 }, // from 7 (oct)
+    },
 };
 
-static const char* const profile_names[3]  = { "S", "T", "J" };
-static const char* const cursor_labels[3]  = { "Matrix", "Scale", "Chaos" };
+static const char* const profile_names[4]  = { "S", "T", "J", "G" };
+static const char* const cursor_labels[4]  = { "Matrix", "Scale", "Chaos", "Seed" };
 
 } // namespace MarkoVData
 
@@ -65,7 +78,7 @@ static const char* const cursor_labels[3]  = { "Matrix", "Scale", "Chaos" };
 class MarkoV : public HemisphereApplet {
 public:
     static constexpr int      NUM_STATES       = 8;
-    static constexpr int      NUM_PROFILES     = 3;
+    static constexpr int      NUM_PROFILES     = 4;
     static constexpr int      HISTORY_SIZE     = 8;
     static constexpr uint32_t LONG_PRESS_TICKS = 5000;
     // CV units per state step: spans root to octave across 8 states
@@ -75,7 +88,8 @@ public:
     static constexpr int CURSOR_MATRIX = 0;
     static constexpr int CURSOR_SCALE  = 1;
     static constexpr int CURSOR_CHAOS  = 2;
-    static constexpr int CURSOR_LAST   = 2;
+    static constexpr int CURSOR_SEED   = 3;
+    static constexpr int CURSOR_LAST   = 3;
 
     const char* applet_name() { return "MarkoV"; }
 
@@ -91,24 +105,30 @@ public:
         gate2_high   = false;
         gate2_ticks  = 0;
         randomized   = false;
+        rng_seed     = (uint32_t)micros();
         for (int i = 0; i < HISTORY_SIZE; i++) history[i] = 0;
         history_head = 0;
     }
 
     void Controller() {
-        // --- Digital In 2: short press = return to seed, long press = new seed ---
+        // --- Digital In 2: short press = replay from seed, long press = new seed ---
         bool g2 = Gate(1);
         if (g2) {
             if (!gate2_high) gate2_high = true;
             gate2_ticks++;
             if (gate2_ticks >= LONG_PRESS_TICKS && !randomized) {
+                rng_seed   = (uint32_t)micros();
+                randomSeed(rng_seed);
                 seed       = random(NUM_STATES);
                 state      = seed;
                 randomized = true;
             }
         } else if (gate2_high) {
             gate2_high = false;
-            if (!randomized) state = seed; // short press: return to seed
+            if (!randomized) {
+                randomSeed(rng_seed);
+                state = seed; // short press: replay identical sequence
+            }
             randomized  = false;
             gate2_ticks = 0;
         }
@@ -146,8 +166,11 @@ public:
     }
 
     void View() {
-        // --- Header: cursor parameter name, shown only while editing ---
-        if (EditMode()) gfxPrint(1, 2, MarkoVData::cursor_labels[cursor]);
+        // --- Header: cursor parameter name, right-justified, shown only while editing ---
+        if (EditMode()) {
+            const char* label = MarkoVData::cursor_labels[cursor];
+            gfxPrint(63 - (strlen(label) * 6), 2, label);
+        }
 
         // --- Parameter line (y=15) ---
         gfxPrint(1,  15, MarkoVData::profile_names[profile]);
@@ -155,12 +178,15 @@ public:
         gfxPrint(qselect + 1);
         gfxPos(36, 15);
         graphics.printf("%d%%", chaos_pct);
+        // Seed indicator: dice icon at col 52
+        gfxIcon(52, 15, RANDOM_ICON);
 
         // Cursor underline — spicy (dotted) for Scale to hint at Aux edit
         switch (cursor) {
             case CURSOR_MATRIX: gfxCursor(1,  23, 7);  break;
             case CURSOR_SCALE:  gfxSpicyCursor(18, 23, 13); break;
             case CURSOR_CHAOS:  gfxCursor(36, 23, 22); break;
+            case CURSOR_SEED:   gfxCursor(52, 23, 10); break;
         }
 
         // Separator
@@ -202,12 +228,20 @@ public:
                 chaos_base = constrain((int)chaos_base + direction, 0, 100);
                 chaos_pct  = chaos_base; // immediate display feedback before next clock
                 break;
+            case CURSOR_SEED:
+                // seed is set via AuxButton or Dig 2 long press
+                break;
         }
     }
 
     void AuxButton() {
         if (cursor == CURSOR_SCALE) {
             HS::QuantizerEdit(qselect);
+        } else if (cursor == CURSOR_SEED) {
+            rng_seed = (uint32_t)micros();
+            randomSeed(rng_seed);
+            seed  = random(NUM_STATES);
+            state = seed;
         }
         CancelEdit();
     }
@@ -219,6 +253,7 @@ public:
         Pack(data, PackLocation{5,  2}, qselect);
         Pack(data, PackLocation{7,  7}, chaos_base);
         Pack(data, PackLocation{14, 3}, seed);
+        Pack(data, PackLocation{17, 32}, rng_seed);
         return data;
     }
 
@@ -228,6 +263,7 @@ public:
         qselect    = constrain((int)Unpack(data, PackLocation{5,  2}), 0, QUANT_CHANNEL_COUNT - 1);
         chaos_base = constrain((int)Unpack(data, PackLocation{7,  7}), 0, 100);
         seed       = constrain((int)Unpack(data, PackLocation{14, 3}), 0, NUM_STATES - 1);
+        rng_seed   = (uint32_t)Unpack(data, PackLocation{17, 32});
     }
 
 protected:
@@ -256,6 +292,7 @@ private:
     bool     gate2_high;
     uint32_t gate2_ticks;
     bool     randomized;
+    uint32_t rng_seed;     // stored RNG seed for repeatable loop
 
     // Advance the Markov chain.
     // chaos: 0-256 fixed-point (0=pure profile weights, 256=flat/uniform)
