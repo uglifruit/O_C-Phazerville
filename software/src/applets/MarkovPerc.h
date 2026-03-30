@@ -252,7 +252,7 @@ public:
         graphics.printf("%d%%", chaos_pct);
         // Seed indicator: dice icon at col 54
         if (seed_flash > 0)
-            gfxInvert(53, 14, 10, 9); // flash: inverted dice cell
+            gfxIcon(54, 14, RANDOM_ICON); // flash: dice 1px higher
         else
             gfxIcon(54, 15, RANDOM_ICON);
 
@@ -273,8 +273,8 @@ public:
         // --- Scrolling hit-type history ---
         // Bar height = accent level; horizontal bands for subdivided states.
         // history_head = next write slot = oldest entry.
-        const int GY   = 25; // graph top y (shifted up 2px vs original)
-        const int GH   = 34; // graph height in pixels
+        const int GY   = 25; // graph top y (below separator)
+        const int GH   = 37; // graph height in pixels (baseline at y=62, line at y=63)
         const int ybot = GY + GH; // bottom of graph area
 
         for (int i = 0; i < HISTORY_SIZE; i++) {
@@ -378,13 +378,12 @@ public:
 protected:
     void SetHelp() {
         help[HELP_DIGITAL1] = "Clock";
-        help[HELP_DIGITAL2] = "Rst/Seed";
+        help[HELP_DIGITAL2] = "RstSeed";
         help[HELP_CV1]      = "Chaos+";
         help[HELP_CV2]      = "Density";
         help[HELP_OUT1]     = "Trigger";
-        help[HELP_OUT2]     = "Accent CV";
+        help[HELP_OUT2]     = "Accent";
         help[HELP_EXTRA1]   = "Enc:Params";
-        help[HELP_EXTRA2]   = "Aux:Seed";
     }
 
 private:
