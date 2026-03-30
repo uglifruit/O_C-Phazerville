@@ -188,7 +188,7 @@ public:
         graphics.printf("%d%%", chaos_pct);
         // Seed indicator: dice icon at col 54
         if (seed_flash > 0)
-            gfxInvert(53, 14, 10, 9); // flash: inverted dice cell
+            gfxIcon(54, 14, RANDOM_ICON); // flash: dice 1px higher
         else
             gfxIcon(54, 15, RANDOM_ICON);
 
@@ -289,7 +289,7 @@ public:
 protected:
     void SetHelp() {
         help[HELP_DIGITAL1] = "Clock";
-        help[HELP_DIGITAL2] = "Rst/Seed";
+        help[HELP_DIGITAL2] = "RstSeed";
         help[HELP_CV1]      = "Chaos+";
         help[HELP_CV2]      = "Transp";
         help[HELP_OUT1]     = "Pitch";
