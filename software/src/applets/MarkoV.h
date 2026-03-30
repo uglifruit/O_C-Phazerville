@@ -159,12 +159,13 @@ public:
             state = NextState(state, chaos);
 
             // Output A: quantize through user-selected quantizer + V/Oct transpose
-            int cv_out = HS::Quantize(qselect, state * STATE_CV_STEP) + transpose;
-            Out(0, cv_out);
+            int pitch_cv = HS::Quantize(qselect, state * STATE_CV_STEP);
+            Out(0, pitch_cv + transpose);
 
-            // Output B: trigger only when the quantized pitch actually changes
-            if (cv_out != prev_cv) ClockOut(1);
-            prev_cv = cv_out;
+            // Output B: trigger only when the quantized pitch changes (ignore transpose
+            // jitter — comparing pitch_cv keeps the trigger stable when CV 2 is noisy)
+            if (pitch_cv != prev_cv) ClockOut(1);
+            prev_cv = pitch_cv;
 
             // Update scrolling note history
             history[history_head] = state;
@@ -192,9 +193,9 @@ public:
         else
             gfxIcon(54, 15, RANDOM_ICON);
 
-        // Reset flash: briefly invert parameter row (left of dice)
+        // Reset flash: briefly invert dice icon only
         if (reset_flash > 0)
-            gfxInvert(0, 14, 52, 9);
+            gfxInvert(53, 14, 10, 9);
 
         // Cursor underline — spicy (dotted) for Scale to hint at Aux edit
         switch (cursor) {
@@ -249,7 +250,7 @@ public:
                 randomSeed(rng_seed);
                 seed       = random(NUM_STATES);
                 state      = seed;
-                seed_flash = 8000; // ~500ms visible flash
+                seed_flash = 2700; // ~170ms visible flash
                 break;
         }
     }
