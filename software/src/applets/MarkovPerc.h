@@ -4,11 +4,11 @@
 // creating a drummer with evolving style and internal memory.
 //
 // Digital 1: Clock — advance to next state
-// Digital 2: Reset — short press = return to seed state, long press = new seed
+// Digital 2: Reset — short press = replay from seed (same RNG sequence), long press = new seed
 // CV In 1: Chaos — flattens the transition distribution (more erratic fills)
 // CV In 2: Density — biases toward hits vs. rests (positive V = more hits)
 // Out A: Trigger — fires sub-triggers for ratchets/flams within the beat
-// Out B: Accent CV — 0-5V scaled to the strength of each individual hit
+// Out B: Accent CV — held for full clock period, level set by beat accent
 
 // ---------------------------------------------------------------------------
 // Hit States
@@ -39,7 +39,7 @@ static constexpr uint8_t ACCENT_FULL   = 5; // maximum accent
 // At chaos=0 the dominant weights dominate hard; at chaos=100 all → 8 (flat).
 //
 //               R    H   AH    F   AF   R2   R3   R4
-static const uint8_t profiles[3][8][8] = {
+static const uint8_t profiles[4][8][8] = {
     // 0: Steady (Rock/Pop)
     // Gravitates toward hits and accented hits. Rests are brief.
     // Flams appear as ornaments. Ratchets are rare fills.
@@ -79,10 +79,23 @@ static const uint8_t profiles[3][8][8] = {
         { 10,  4,  4,  6,  8,  8, 14, 10 }, // from RATCHET_3 — R4 very likely
         { 12,  4,  4,  4,  6,  6, 12, 14 }, // from RATCHET_4 — self-reinforcing
     },
+    // 3: Sparse
+    // Long silences punctuated by single hits. Ratchets and flams essentially absent.
+    // REST self-loops heavily. HIT always returns to REST.
+    {
+        { 12, 10,  2,  1,  1,  1,  1,  1 }, // from REST
+        { 18,  6,  2,  1,  1,  1,  1,  1 }, // from HIT
+        { 16,  6,  4,  1,  1,  1,  1,  1 }, // from ACC_HIT
+        { 18,  4,  2,  2,  1,  1,  1,  1 }, // from FLAM
+        { 18,  4,  2,  1,  2,  1,  1,  1 }, // from ACC_FLAM
+        { 20,  4,  2,  1,  1,  2,  1,  1 }, // from RATCHET_2
+        { 20,  4,  2,  1,  1,  1,  1,  1 }, // from RATCHET_3
+        { 20,  4,  2,  1,  1,  1,  1,  1 }, // from RATCHET_4
+    },
 };
 
-static const char* const profile_names[3] = { "S", "T", "J" };
-static const char* const cursor_labels[3] = { "Style", "Chaos" };
+static const char* const profile_names[4] = { "S", "T", "J", "P" };
+static const char* const cursor_labels[3] = { "Matrix", "Chaos", "Seed" };
 
 // State name abbreviations for display
 static const char* const state_names[8] = {
@@ -95,7 +108,7 @@ static const char* const state_names[8] = {
 class MarkovPerc : public HemisphereApplet {
 public:
     static constexpr int      NUM_STATES       = 8;
-    static constexpr int      NUM_PROFILES     = 3;
+    static constexpr int      NUM_PROFILES     = 4;
     static constexpr int      HISTORY_SIZE     = 8;
     static constexpr uint32_t LONG_PRESS_TICKS = 5000;
     static constexpr int      MAX_SCHED        = 4; // max sub-triggers per beat
@@ -103,7 +116,8 @@ public:
     // Cursor positions
     static constexpr int CURSOR_STYLE = 0;
     static constexpr int CURSOR_CHAOS = 1;
-    static constexpr int CURSOR_LAST  = 1;
+    static constexpr int CURSOR_SEED  = 2;
+    static constexpr int CURSOR_LAST  = 2;
 
     // Hit state indices
     static constexpr int STATE_REST      = 0;
@@ -132,24 +146,30 @@ public:
         gate2_high      = false;
         gate2_ticks     = 0;
         randomized      = false;
+        rng_seed        = (uint32_t)micros();
         for (int i = 0; i < HISTORY_SIZE; i++) history[i] = STATE_REST;
         history_head    = 0;
     }
 
     void Controller() {
-        // --- Digital In 2: short = return to seed, long = new random seed ---
+        // --- Digital In 2: short = replay from seed, long = new random seed ---
         bool g2 = Gate(1);
         if (g2) {
             if (!gate2_high) gate2_high = true;
             gate2_ticks++;
             if (gate2_ticks >= LONG_PRESS_TICKS && !randomized) {
+                rng_seed   = (uint32_t)micros();
+                randomSeed(rng_seed);
                 seed       = random(NUM_STATES - 1) + 1; // never seed on REST
                 hit_state  = seed;
                 randomized = true;
             }
         } else if (gate2_high) {
             gate2_high = false;
-            if (!randomized) hit_state = seed; // short press: return to seed
+            if (!randomized) {
+                randomSeed(rng_seed);
+                hit_state = seed; // short press: replay identical sequence
+            }
             randomized  = false;
             gate2_ticks = 0;
         }
@@ -178,10 +198,17 @@ public:
             hit_state = NextState(hit_state, chaos, density);
             ScheduleHit(hit_state, clock_period);
 
-            // Fire tick-0 events immediately
+            // Set accent CV for full clock period based on beat accent level
+            uint8_t beat_acc   = BeatAccent(hit_state);
+            int     accent_val = (int)beat_acc * ONE_OCTAVE;
+            Out(1, accent_val);
+            accent_cv        = accent_val;
+            accent_countdown = clock_period;
+
+            // Fire tick-0 events immediately (Out A triggers only)
             for (int i = 0; i < sched_count; i++) {
                 if (schedule[i].tick == 0) {
-                    FireTrig(schedule[i].accent);
+                    FireTrig();
                 }
             }
 
@@ -194,101 +221,84 @@ public:
         sub_tick++;
         for (int i = 0; i < sched_count; i++) {
             if (schedule[i].tick > 0 && sub_tick == schedule[i].tick) {
-                FireTrig(schedule[i].accent);
+                FireTrig();
             }
         }
 
-        // Zero accent CV after trig_length expires
+        // Zero accent CV after clock period expires
         if (accent_countdown > 0 && --accent_countdown == 0) {
             Out(1, 0);
         }
     }
 
     void View() {
-        // --- Cursor label at top, shown only while editing ---
-        if (EditMode()) gfxPrint(1, 2, MarkovPercData::cursor_labels[cursor]);
+        // --- Cursor label at top, right-justified, shown only while editing ---
+        if (EditMode()) {
+            const char* label = MarkovPercData::cursor_labels[cursor];
+            gfxPrint(63 - (strlen(label) * 6), 2, label);
+        }
 
-        // --- Parameter line: [S/T/J]     [Chaos%] ---
+        // --- Parameter line: [S/T/J/P]     [Chaos%]   [dice] ---
         gfxPrint(1, 15, MarkovPercData::profile_names[profile]);
         gfxPos(36, 15);
         graphics.printf("%d%%", chaos_pct);
+        // Seed indicator: dice icon at col 52
+        gfxIcon(52, 15, RANDOM_ICON);
 
         // Cursor underlines
         switch (cursor) {
             case CURSOR_STYLE: gfxCursor(1,  23, 7);  break;
             case CURSOR_CHAOS: gfxCursor(36, 23, 22); break;
+            case CURSOR_SEED:  gfxCursor(52, 23, 10); break;
         }
 
         // Separator
         gfxLine(0, 25, 63, 25);
 
         // --- Scrolling hit-type history ---
-        // Each 8px slot shows a glyph representing the hit type.
+        // Bar height = accent level; horizontal bands for subdivided states.
         // history_head = next write slot = oldest entry.
-        const int GY = 27; // graph top y
-        const int GH = 34; // graph height in pixels
-        const int GH_TALL = GH;        // full height (for hits/accents)
-        const int GH_MED  = (GH * 2) / 3;
-        const int GH_SHORT = GH / 3;
+        const int GY   = 25; // graph top y (shifted up 2px vs original)
+        const int GH   = 34; // graph height in pixels
+        const int ybot = GY + GH; // bottom of graph area
 
         for (int i = 0; i < HISTORY_SIZE; i++) {
-            int idx  = (history_head + i) % HISTORY_SIZE;
-            int s    = history[idx];
-            int x    = i * 8;
-            int ybot = GY + GH; // bottom of graph area
+            int idx = (history_head + i) % HISTORY_SIZE;
+            int s   = history[idx];
+            int x   = i * 8;
 
+            if (s == STATE_REST) {
+                // Dot at baseline
+                gfxRect(x + 3, ybot - 1, 1, 1);
+                continue;
+            }
+
+            uint8_t acc   = BeatAccent(s);
+            int     bar_h = max(2, (int)acc * GH / (int)MarkovPercData::ACCENT_FULL);
+
+            // Number of horizontal bands (subdivisions of bar into segments)
+            int bands = 1;
             switch (s) {
-                case STATE_REST:
-                    // Empty — just draw a small dot at baseline
-                    gfxRect(x + 3, ybot - 1, 1, 1);
-                    break;
+                case STATE_FLAM:
+                case STATE_ACC_FLAM:  bands = 2; break;
+                case STATE_RATCHET_2: bands = 2; break;
+                case STATE_RATCHET_3: bands = 3; break;
+                case STATE_RATCHET_4: bands = 4; break;
+                default: bands = 1; break;
+            }
 
-                case STATE_HIT:
-                    // Single narrow bar, full height
-                    gfxRect(x + 3, ybot - GH_TALL, 1, GH_TALL);
-                    break;
+            // Width: wider for accented hits
+            int bar_w = (s == STATE_ACC_HIT || s == STATE_ACC_FLAM) ? 4 : 3;
+            int bar_x = x + (8 - bar_w) / 2;
 
-                case STATE_ACC_HIT:
-                    // Wide bar, full height — "louder" = thicker
-                    gfxRect(x + 2, ybot - GH_TALL, 3, GH_TALL);
-                    break;
-
-                case STATE_FLAM: {
-                    // Grace note (short, narrow) + main hit (full, narrow)
-                    int gh = GH_MED;
-                    gfxRect(x + 1, ybot - gh / 2, 1, gh / 2);  // grace: half height
-                    gfxRect(x + 4, ybot - gh,     1, gh);       // main: medium height
-                    break;
-                }
-
-                case STATE_ACC_FLAM: {
-                    // Grace note (short, narrow) + accented main (full, wide)
-                    int gh = GH_TALL;
-                    gfxRect(x + 1, ybot - gh / 3, 1, gh / 3);  // grace: short
-                    gfxRect(x + 3, ybot - gh,     2, gh);       // main: tall & wide
-                    break;
-                }
-
-                case STATE_RATCHET_2:
-                    // Two evenly-spaced bars, medium height
-                    gfxRect(x + 1, ybot - GH_MED, 1, GH_MED);
-                    gfxRect(x + 5, ybot - GH_MED, 1, GH_MED);
-                    break;
-
-                case STATE_RATCHET_3:
-                    // Three evenly-spaced bars, shorter
-                    gfxRect(x + 0, ybot - GH_SHORT, 1, GH_SHORT);
-                    gfxRect(x + 3, ybot - GH_SHORT, 1, GH_SHORT);
-                    gfxRect(x + 6, ybot - GH_SHORT, 1, GH_SHORT);
-                    break;
-
-                case STATE_RATCHET_4:
-                    // Four bars, shortest — dense
-                    gfxRect(x + 0, ybot - GH_SHORT, 1, GH_SHORT);
-                    gfxRect(x + 2, ybot - GH_SHORT, 1, GH_SHORT);
-                    gfxRect(x + 4, ybot - GH_SHORT, 1, GH_SHORT);
-                    gfxRect(x + 6, ybot - GH_SHORT, 1, GH_SHORT);
-                    break;
+            // Draw bar subdivided into bands with 1px gap between each
+            int band_h_base = bar_h / bands;
+            for (int b = 0; b < bands; b++) {
+                int y_base  = ybot - bar_h + b * band_h_base;
+                int this_h  = (b < bands - 1) ? (band_h_base - 1)
+                                               : (bar_h - b * band_h_base);
+                if (this_h < 1) this_h = 1;
+                gfxRect(bar_x, y_base, bar_w, this_h);
             }
         }
 
@@ -309,12 +319,21 @@ public:
                 chaos_base = constrain((int)chaos_base + direction, 0, 100);
                 chaos_pct  = chaos_base; // immediate display feedback before next clock
                 break;
+            case CURSOR_SEED:
+                // seed is set via AuxButton or Dig 2 long press
+                break;
         }
     }
 
     void AuxButton() {
-        // Jump to seed state (useful in performance to reset feel)
-        hit_state = seed;
+        if (cursor == CURSOR_SEED) {
+            rng_seed  = (uint32_t)micros();
+            randomSeed(rng_seed);
+            seed      = random(NUM_STATES - 1) + 1;
+            hit_state = seed;
+        } else {
+            hit_state = seed; // existing behavior: jump to seed
+        }
         CancelEdit();
     }
 
@@ -324,6 +343,7 @@ public:
         Pack(data, PackLocation{2,  3}, hit_state);
         Pack(data, PackLocation{5,  7}, chaos_base);
         Pack(data, PackLocation{12, 3}, seed);
+        Pack(data, PackLocation{15, 32}, rng_seed);
         return data;
     }
 
@@ -332,6 +352,7 @@ public:
         hit_state  = constrain((int)Unpack(data, PackLocation{2,  3}), 0, NUM_STATES - 1);
         chaos_base = constrain((int)Unpack(data, PackLocation{5,  7}), 0, 100);
         seed       = constrain((int)Unpack(data, PackLocation{12, 3}), 0, NUM_STATES - 1);
+        rng_seed   = (uint32_t)Unpack(data, PackLocation{15, 32});
     }
 
 protected:
@@ -350,7 +371,7 @@ private:
     // --- Scheduled sub-trigger entry ---
     struct SchedEntry {
         int16_t tick;   // ISR ticks after clock edge (0 = fire immediately)
-        uint8_t accent; // 0-5, multiplied by ONE_OCTAVE for Output B
+        uint8_t accent; // kept for schedule compatibility (not used for Out B)
     };
 
     uint8_t   cursor;
@@ -370,16 +391,26 @@ private:
     bool      gate2_high;
     uint32_t  gate2_ticks;
     bool      randomized;
-    int       ybot;          // cached bottom of graph for baseline line
+    uint32_t  rng_seed;      // stored RNG seed for repeatable loop
 
-    // Fire Output A trigger and set Output B accent CV.
-    // ClockOut() uses global trig_length automatically.
-    void FireTrig(uint8_t accent_level) {
+    // Return the accent level for a given hit state (used for Out B CV and View).
+    uint8_t BeatAccent(uint8_t state) {
+        switch (state) {
+            case STATE_REST:      return MarkovPercData::ACCENT_NONE;
+            case STATE_HIT:       return MarkovPercData::ACCENT_SOFT;
+            case STATE_ACC_HIT:   return MarkovPercData::ACCENT_FULL;
+            case STATE_FLAM:      return MarkovPercData::ACCENT_MED;
+            case STATE_ACC_FLAM:  return MarkovPercData::ACCENT_FULL;
+            case STATE_RATCHET_2: return MarkovPercData::ACCENT_HARD;
+            case STATE_RATCHET_3: return MarkovPercData::ACCENT_MED;
+            case STATE_RATCHET_4: return MarkovPercData::ACCENT_SOFT;
+            default:              return MarkovPercData::ACCENT_NONE;
+        }
+    }
+
+    // Fire Output A trigger only (Out B is set once per beat in Controller).
+    void FireTrig() {
         ClockOut(0);
-        int cv = (int)accent_level * ONE_OCTAVE;
-        Out(1, cv);
-        accent_cv        = cv;
-        accent_countdown = HEMISPHERE_CLOCK_TICKS * trig_length;
     }
 
     // Build the sub-trigger schedule for the given hit state.
@@ -405,7 +436,7 @@ private:
                 break;
 
             case STATE_FLAM:
-                // Grace note (soft) immediately, main hit slightly after
+                // Grace note immediately, main hit slightly after
                 schedule[0] = {0,              MarkovPercData::ACCENT_GRACE};
                 schedule[1] = {(int16_t)p8,    MarkovPercData::ACCENT_MED};
                 sched_count = 2;
