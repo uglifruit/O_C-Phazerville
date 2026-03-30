@@ -205,8 +205,8 @@ public:
     }
 
     void View() {
-        // --- Cursor label at top ---
-        gfxPrint(0, 6, MarkovPercData::cursor_labels[cursor]);
+        // --- Cursor label at top, shown only while editing ---
+        if (EditMode()) gfxPrint(1, 2, MarkovPercData::cursor_labels[cursor]);
 
         // --- Parameter line: [S/T/J]     [Chaos%] ---
         gfxPrint(1, 15, MarkovPercData::profile_names[profile]);
@@ -307,6 +307,7 @@ public:
                 break;
             case CURSOR_CHAOS:
                 chaos_base = constrain((int)chaos_base + direction, 0, 100);
+                chaos_pct  = chaos_base; // immediate display feedback before next clock
                 break;
         }
     }
