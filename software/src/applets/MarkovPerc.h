@@ -147,6 +147,8 @@ public:
         gate2_ticks     = 0;
         randomized      = false;
         rng_seed        = (uint32_t)micros();
+        seed_flash      = 0;
+        reset_flash     = 0;
         for (int i = 0; i < HISTORY_SIZE; i++) history[i] = STATE_REST;
         history_head    = 0;
     }
@@ -168,11 +170,16 @@ public:
             gate2_high = false;
             if (!randomized) {
                 randomSeed(rng_seed);
-                hit_state = seed; // short press: replay identical sequence
+                hit_state   = seed; // short press: replay identical sequence
+                reset_flash = 8000; // ~500ms visual indicator
             }
             randomized  = false;
             gate2_ticks = 0;
         }
+
+        // --- Flash countdowns ---
+        if (seed_flash  > 0) --seed_flash;
+        if (reset_flash > 0) --reset_flash;
 
         // --- Digital In 1: Clock ---
         if (Clock(0)) {
@@ -238,18 +245,26 @@ public:
             gfxPrint(63 - (strlen(label) * 6), 2, label);
         }
 
-        // --- Parameter line: [S/T/J/P]     [Chaos%]   [dice] ---
+        // --- Parameter line: [S/T/J/P]  [Chaos%]  [dice] ---
+        // Layout: profile@1, chaos@22, dice@54 (no overlap at 100%)
         gfxPrint(1, 15, MarkovPercData::profile_names[profile]);
-        gfxPos(36, 15);
+        gfxPos(22, 15);
         graphics.printf("%d%%", chaos_pct);
-        // Seed indicator: dice icon at col 52
-        gfxIcon(52, 15, RANDOM_ICON);
+        // Seed indicator: dice icon at col 54
+        if (seed_flash > 0)
+            gfxInvert(53, 14, 10, 9); // flash: inverted dice cell
+        else
+            gfxIcon(54, 15, RANDOM_ICON);
+
+        // Reset flash: briefly invert parameter row (left of dice)
+        if (reset_flash > 0)
+            gfxInvert(0, 14, 52, 9);
 
         // Cursor underlines
         switch (cursor) {
-            case CURSOR_STYLE: gfxCursor(1,  23, 7);  break;
-            case CURSOR_CHAOS: gfxCursor(36, 23, 22); break;
-            case CURSOR_SEED:  gfxCursor(52, 23, 10); break;
+            case CURSOR_STYLE: gfxCursor(1,  23, 6);  break;
+            case CURSOR_CHAOS: gfxCursor(22, 23, 24); break;
+            case CURSOR_SEED:  gfxCursor(54, 23, 8);  break;
         }
 
         // Separator
@@ -320,7 +335,12 @@ public:
                 chaos_pct  = chaos_base; // immediate display feedback before next clock
                 break;
             case CURSOR_SEED:
-                // seed is set via AuxButton or Dig 2 long press
+                // Encoder re-rolls seed immediately; stay in edit mode for repeated rolls
+                rng_seed   = (uint32_t)micros();
+                randomSeed(rng_seed);
+                seed       = random(NUM_STATES - 1) + 1; // never seed on REST
+                hit_state  = seed;
+                seed_flash = 8000; // ~500ms visible flash
                 break;
         }
     }
@@ -392,6 +412,8 @@ private:
     uint32_t  gate2_ticks;
     bool      randomized;
     uint32_t  rng_seed;      // stored RNG seed for repeatable loop
+    uint16_t  seed_flash;    // >0: invert dice icon (encoder re-roll feedback)
+    uint16_t  reset_flash;   // >0: invert param row (Dig 2 reset feedback)
 
     // Return the accent level for a given hit state (used for Out B CV and View).
     uint8_t BeatAccent(uint8_t state) {
