@@ -3,86 +3,160 @@ layout: default
 ---
 # MarkoV
 
-A first-order **Markov chain** melodic generator. On each clock, the next scale degree is chosen by weighted random selection from a transition matrix, where the weights depend on the current state. Three **Tendency Profiles** shape the character of the melody. A **Chaos** control continuously blends between the profile's structured weights and a flat uniform distribution, giving you a spectrum from composed to erratic.
+**MarkoV** is a melodic Markov chain generator. On each clock it chooses the next note from a weighted probability table, producing lines that have a distinct musical character — moving in patterns that feel stylistically coherent — but never exactly repeating.
 
 ---
 
-### I/O
+## What is a Markov Chain?
 
-|        | 1/3 | 2/4 |
-| ------ | :-: | :-: |
-| TRIG   | Clock — advance to next state | Reset — short press returns to seed; long press sets a new random seed |
-| CV INs | Chaos offset — adds to the encoder-set Chaos baseline | Transpose — V/Oct pitch offset applied after quantization |
-| OUTs   | Quantized pitch CV | Trigger — pulses only when the quantized pitch actually changes |
+A Markov chain is a system where the *next* state is chosen by weighted random probability based entirely on the *current* state. Each state has its own set of transition weights pointing toward every other state. The chain has no memory beyond the present moment, yet the weights give it strong tendencies.
 
-_Output B will **not** fire if two consecutive Markov states happen to land on the same pitch in the chosen scale. This makes rhythmic variation a natural consequence of scale choice._
+This puts it in a distinct category from the other generators you may know:
 
----
+| Generator | How it works | Character |
+|---|---|---|
+| **Pure random** | No memory — each step is fully independent | Unpredictable, no musical tendency |
+| **Euclidean / clock divider** | Deterministic, fixed repeating pattern | Rhythmic, predictable, loops exactly |
+| **Turing Machine** | Shift register — a bit sequence that locks or slowly drifts | Loops that evolve gradually |
+| **Markov chain** | Weighted probability from the current state | Musical tendency without fixed repetition |
 
-### UI Parameters
-
-Turn the encoder to move between parameters. Click to enter edit mode, click again to lock.
-
-| Display | Parameter | Range | Notes |
-|---------|-----------|-------|-------|
-| **S / T / J** | Matrix (Tendency Profile) | S, T, J | See profiles below |
-| **Q1–Q4** | Scale | Q1–Q4 | Selects quantizer channel; dotted cursor = Aux opens full scale editor |
-| **0–100%** | Chaos | 0–100% | Baseline chaos level; CV In 1 adds on top |
-
-The top line of the display shows the name of the currently-selected parameter ("Matrix", "Scale", or "Chaos") as a reminder.
+The key quality is *stylistic coherence without a loop*: the chain gravitates toward certain intervals and motion patterns — just like a real musical style — without ever locking into an exact repeating sequence. You get the feeling of a musician working within a vocabulary, rather than a sequencer running a pattern.
 
 ---
 
-### Tendency Profiles
+## I/O
 
-The heart of MarkoV. Each profile is an 8×8 transition matrix where rows = current state and columns = next state. Higher values = more likely. Weights range from 1 to 22, giving strong 20:1 ratios at 0% chaos so the character is clearly audible.
+|        | 1 (left) | 2 (right) |
+| ------ | :------: | :-------: |
+| **TRIG** | Clock — advance chain | Reset — short = replay from seed; long = new seed |
+| **CV IN** | Chaos offset | Transpose (V/Oct) |
+| **OUT** | Quantized pitch | Trigger (on pitch change) |
 
-**S — Pentatonic Stability**
-Root (degree 1) and fifth (degree 5) are overwhelmingly preferred arrivals from any state. The melody gravitates toward these anchor points with occasional passing tones. Ideal for drones, ostinatos, or melodic backgrounds that stay in one place.
+**Out A** outputs the current state, quantized through the selected scale channel, with CV 2 added as a V/Oct transpose.
 
-**T — Chromatic Tension**
-Strongly prefers stepwise motion (±1 scale degree). The melody snakes up and down, rarely leaping. Repetition of the same note is common. Creates a restless, chromatic feel — especially interesting with chromatic or microtonal scales.
+**Out B** fires a trigger only when the *quantized pitch actually changes*. Two adjacent Markov states that happen to fall on the same scale degree will not re-trigger. This makes Out B useful as a gate for a VCA or envelope where you want the envelope to fire only on genuine new notes — the trigger rhythm becomes a natural consequence of scale choice.
 
-**J — Jazz Tendencies**
-The 7th scale degree is the dominant target from almost any state, creating the characteristic "reach for the 7th" gesture of jazz lines. The 3rd is a common secondary arrival. Root resolution from the 7th is strong. Tritone substitution is implied from the 4th.
+**CV 1 (Chaos offset):** Adds to the encoder-set Chaos baseline. When nothing is patched and the source is set to None, it has no effect. If the source is set to a channel with nothing plugged in, the floating ADC input may read high and push Chaos toward 100% — set CV 1 source to **None** when not using it.
 
----
-
-### Chaos
-
-At **0% chaos** the profile weights dominate — melodies are strongly shaped by the chosen tendency profile.
-
-At **100% chaos** all transition weights are equalised — any next note is equally likely regardless of the current note or the profile. The profile has no effect.
-
-**CV In 1** adds to the encoder-set Chaos baseline, so you can set a starting point with the encoder and modulate upward with voltage. Patching an LFO here creates continuously evolving melodic density.
+**CV 2 (Transpose):** Raw V/Oct offset added after quantization. The trigger comparison is made before transpose is applied, so CV 2 jitter does not cause spurious triggers. Patch a sequencer here to transpose the entire Markov melody between keys in real time.
 
 ---
 
-### Reset & Seed
+## Controls
 
-**Short press** on Digital In 2 (or as a trigger): returns to the **seed state** — the same starting scale degree every time. Use this to repeat a melodic phrase from a known starting point.
+Four parameters, navigated by the encoder (rotate to move cursor, press to enter edit, press again to exit).
 
-**Long press** (hold Digital In 2 for ~1 second): picks a **new random seed** and jumps to it. That new state becomes the new short-press reset point going forward. The seed is saved with presets.
+| Cursor | Parameter | Range | Notes |
+|--------|-----------|-------|-------|
+| **Matrix** | Tendency profile | S / T / J / G / D | Sets the transition weight table |
+| **Scale** | Quantizer channel | Q1–Q4 | Selects which global quantizer to use |
+| **Chaos** | Randomisation | 0–100% | Blends weights toward flat/uniform |
+| **Seed** | Loop anchor | — | Dice icon; controls the deterministic reset point |
 
----
+**Scale** uses a dotted underline to indicate that **Aux** (the button below the right encoder) opens the full scale editor for the selected quantizer channel. Rotating the encoder while on Scale steps through Q1–Q4.
 
-### What is a Markov Chain?
-
-A Markov chain is a mathematical model where the probability of the next event depends only on the current state — not on the history of how you got there. In MarkoV, each **state** is a scale degree (1–8), and the **transition matrix** defines how likely you are to jump to any other degree from your current position.
-
-The key musical insight is that different melodic styles have characteristic interval patterns:
-- Stable tonal music gravitates toward root and fifth
-- Chromatic music moves in small steps
-- Jazz leaps to the leading tone and resolves dramatically
-
-By encoding these tendencies as probability weights, MarkoV can generate melodies that feel stylistically consistent without being deterministic or repetitive.
+**Seed** has no numeric value — the dice icon shows its current state. See Seed & Reset below for full details.
 
 ---
 
-### Tips
+## Chaos
 
-- **Pair with a rhythmic gate**: MarkoV outputs a trigger on Output B only when the pitch changes, so it naturally generates rhythmic patterns when paired with a VCA or envelope. Dense scales produce more frequent triggers; sparse pentatonic scales create rests.
-- **Transpose with a sequence**: Patching a sequencer into CV In 2 transposes the entire Markov melody, effectively key-modulating in real time.
-- **Chaos as an arc**: Start at 0% chaos and slowly sweep toward 100% over a long period to create a gradual transition from composed to generative.
-- **S profile with a minor pentatonic scale**: The pull to root and fifth combined with pentatonic pitch selection produces a reliable, melodic output suitable for leads.
-- **J profile with a Dorian or mixolydian scale**: The 7th-degree bias takes on very different character depending on whether the 7th is major or minor.
+Chaos blends the profile's weighted transition table toward a flat, uniform distribution:
+
+- **0%** — pure profile weights; the chain follows its tendency strongly
+- **50%** — character is present but motion is more varied
+- **100%** — all weights equal; the chain moves at random with no tendency
+
+CV 1 adds to the encoder-set baseline, so you can set a floor with the encoder and sweep upward with voltage. Patching an LFO here creates continuously evolving melodic density.
+
+---
+
+## The Five Profiles (Transition Matrices)
+
+Each profile is an 8×8 weight table. The **row** is the current state (where you are now); the **column** is a possible next state (where you might go). Higher numbers mean more likely. At Chaos=0 these weights are followed closely; at Chaos=100 they are ignored entirely.
+
+The eight states are scale degrees: **0** = root, **1** = 2nd, **2** = 3rd, **3** = 4th, **4** = 5th, **5** = 6th, **6** = 7th, **7** = octave. The actual pitches depend on your chosen quantizer and scale.
+
+### S — Stability (Pentatonic)
+
+Root (0) and fifth (4) are overwhelmingly preferred destinations from any position. The chain continuously gravitates back to these two anchors. The octave (7) is a common secondary arrival. All other steps are rare.
+
+Produces melodies that orbit the root and fifth — characteristic of folk, modal, and drone-adjacent music. Even with moderate Chaos, the tonal centre stays very clear. Best with a pentatonic or similarly open scale.
+
+### T — Tension (Chromatic)
+
+Stepwise motion dominates: from any position the most likely moves are ±1 state, with the current note also common (repetition). Leaps are very rare. The chain produces snake-like lines that creep up or down through the range.
+
+Works well when the quantizer includes close intervals (chromatic, whole-tone). With a sparse scale the steps become larger intervals. Add Chaos to occasionally break out of the current direction of travel.
+
+### J — Jazz Tendencies
+
+The seventh (state 6) exerts a strong gravitational pull from almost every position — many rows weight it very highly. From the seventh, the root is the overwhelmingly likely resolution. This creates the core jazz gesture: tension toward the 7th, release to root, repeat with variation.
+
+Secondary tendencies include the 3rd (state 2) as a common secondary arrival and an implied tritone pull from the 4th toward the 7th. Use a Dorian, Mixolydian, or Lydian dominant scale to put the 7th in the right harmonic position.
+
+### G — Glacial
+
+Very heavy self-loops: staying on the current note is the most probable move (~40–50%). When the chain does move, only adjacent steps (±1) are possible — leaps are essentially eliminated. Root and fifth remain as attractors when movement finally occurs.
+
+Suited to very slow clocks and long sustained notes. The chain drifts minimally through a scale, changing direction only rarely. Adding Chaos is particularly effective here — it breaks the self-loops and introduces movement while still preventing leaps.
+
+### D — Drone
+
+The strongest self-loops of any profile: ~83% probability of staying on the current note. No attractors — the chain has no pull toward root, fifth, or any other degree. The only meaningful escapes are ±1 steps, and even these are rare.
+
+**Out B will stay silent for long stretches at Chaos=0.** The note is locked in place. This profile is intended for use with CV 1 Chaos as the primary performance control: at low Chaos you get a sustained drone; sweeping Chaos upward gradually introduces movement and triggers. The transition from silence to occasional movement to active melody all happens within the Chaos range.
+
+Patch an envelope or LFO into CV 1 to animate the drone into life at musical moments, then let it settle back to stillness.
+
+---
+
+## Seed & Reset
+
+The seed system gives you a deterministic loop anchor. Two values are stored: the **start state** (which scale degree to return to) and an **RNG seed** (the seed for the random number generator). Because resetting the RNG seed replays the same random number sequence, a short-press reset reproduces the *exact same note sequence* every time.
+
+### Short press on Digital 2 — Replay loop
+Resets the RNG to the stored seed and returns to the start state. The dice icon briefly inverts (~170ms) to confirm. The chain will now play the identical sequence of notes it played after the last seed was set.
+
+### Long press on Digital 2 (~3 seconds) — New seed
+Generates a new start state and a new RNG seed from the current time. From this moment on, short press replays *this* new loop.
+
+### Encoder on Seed cursor — Re-roll
+Rotating the encoder immediately rolls a new seed. You do not need to click out — keep rotating to keep rolling until you find something you like. The dice icon shifts up one pixel briefly to confirm each roll.
+
+### Aux on Seed cursor — Re-roll
+Same as rotating the encoder on Seed: generates a new seed and jumps to it.
+
+**Performance workflow:** let the chain run freely → hear something you like → short press Digital 2 to lock in that loop → use long press or encoder re-roll to move to a new loop at the next section.
+
+---
+
+## Display
+
+```
+                  [Scale]    ← cursor label, right-justified, Edit mode only
+[S] [Q1] [42%] [dice]       ← profile / scale / chaos% / seed, y=15
+──────────────────────       ← separator
+█  ██ █  ██ █  ██  █        ← scrolling bar graph, 8 steps, oldest → newest
+──────────────────────       ← baseline
+```
+
+The bar graph shows the last 8 states. Bar height represents scale degree — state 0 = minimum height, state 7 = full height. This is a history readout only; it does not predict future steps.
+
+---
+
+## Tips
+
+- **Out B as rhythmic gate:** Dense scales produce more frequent triggers (more unique pitches); sparse pentatonic scales create natural rests. The trigger rhythm is an emergent property of scale plus profile.
+- **D profile + Chaos CV:** Use D as a drone with CV 1 controlling how much movement occurs. An envelope triggered by a performance event can sweep Chaos up and back, briefly animating the drone into a melodic phrase.
+- **Glacial + slow clock + reverb:** Long note durations with minimal movement. Works well as a background drone that slowly evolves.
+- **Jazz profile + Dorian or Mixolydian:** The 7th-degree pull takes on very different character depending on whether the 7th is major or minor. Mixolydian gives a bluesy dominant-7th feel; Dorian gives a cooler, more ambiguous tension.
+- **Chaos as a performance arc:** Start at 0% and gradually increase over a long section to move from composed tendency to free randomness, then snap back with a seed reset.
+- **Pair with MarkovPerc:** Run both from the same clock. MarkovPerc drives rhythm and accent; MarkoV drives pitch. The profile names (S/T/J) are intentionally parallel — matching moods on both creates coherent ensemble textures.
+- **Transpose with a sequencer:** Patch a step sequencer into CV 2 to move MarkoV between keys at section boundaries without changing the quantizer.
+
+---
+
+## Credits
+
+MarkoV by uglifruit.
