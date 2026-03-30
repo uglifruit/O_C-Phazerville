@@ -146,8 +146,8 @@ public:
     }
 
     void View() {
-        // --- Header: cursor parameter name (replaces applet name while navigating) ---
-        gfxPrint(0, 6, MarkoVData::cursor_labels[cursor]);
+        // --- Header: cursor parameter name, shown only while editing ---
+        if (EditMode()) gfxPrint(1, 2, MarkoVData::cursor_labels[cursor]);
 
         // --- Parameter line (y=15) ---
         gfxPrint(1,  15, MarkoVData::profile_names[profile]);
@@ -200,6 +200,7 @@ public:
                 break;
             case CURSOR_CHAOS:
                 chaos_base = constrain((int)chaos_base + direction, 0, 100);
+                chaos_pct  = chaos_base; // immediate display feedback before next clock
                 break;
         }
     }
