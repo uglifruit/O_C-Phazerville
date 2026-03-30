@@ -196,10 +196,9 @@ public:
             chaos_pct    = constrain(chaos_base + cv_chaos, 0, 100);
             int chaos    = (chaos_pct * 256) / 100;
 
-            // CV 2: Density — biases hit vs rest (0V = neutral, +V = more hits)
-            // Map to 0-256; 128 = neutral (no bias)
-            int cv2     = constrain(In(1), 0, HEMISPHERE_MAX_INPUT_CV);
-            int density = Proportion(cv2, HEMISPHERE_MAX_INPUT_CV, 256);
+            // CV 2: Density — bipolar: 0V = neutral (128), +V = more hits, -V = more rests
+            // Proportion maps In(1) [-MAX..+MAX] → [-128..+128], offset by 128 → [0..256]
+            int density = constrain(128 + Proportion(In(1), HEMISPHERE_MAX_INPUT_CV, 128), 0, 256);
 
             // Advance Markov chain and schedule sub-triggers
             hit_state = NextState(hit_state, chaos, density);
@@ -256,9 +255,9 @@ public:
         else
             gfxIcon(54, 15, RANDOM_ICON);
 
-        // Reset flash: briefly invert parameter row (left of dice)
+        // Reset flash: briefly invert dice icon only
         if (reset_flash > 0)
-            gfxInvert(0, 14, 52, 9);
+            gfxInvert(53, 14, 10, 9);
 
         // Cursor underlines
         switch (cursor) {
@@ -340,7 +339,7 @@ public:
                 randomSeed(rng_seed);
                 seed       = random(NUM_STATES - 1) + 1; // never seed on REST
                 hit_state  = seed;
-                seed_flash = 8000; // ~500ms visible flash
+                seed_flash = 2700; // ~170ms visible flash
                 break;
         }
     }
@@ -514,17 +513,14 @@ private:
             // Chaos interpolation: blend profile weight toward flat (8)
             int w  = (pw * inv_chaos + 8 * chaos) >> 8;
 
-            // Density bias: scale REST down, all other states up
-            // density=128 → neutral. density=256 → Rest halved, hits doubled.
-            // density=0   → Rest doubled, hits halved.
+            // Density bias: symmetric around 128 (neutral).
+            // density=128: both factors = 1.0 (no change)
+            // density=256: REST → 0 (suppressed), hits → 2× (doubled)
+            // density=0:   REST → 2× (doubled),  hits → 0 (suppressed)
             if (j == STATE_REST) {
-                // REST weight scales inversely with density
-                // At density=128: w unchanged. At density=256: w * 0. At density=0: w * 2.
-                w = (w * (256 - density)) >> 7; // >> 7 = divide by 128
+                w = (w * (256 - density)) >> 7; // 0→2×, 128→1×, 256→0
             } else {
-                // Hit weights scale with density
-                // At density=128: w unchanged. At density=256: w * 2.
-                w = (w * (128 + (density >> 1))) >> 7;
+                w = (w * density) >> 7;          // 0→0,  128→1×, 256→2×
             }
 
             weights[j] = max(1, w);
