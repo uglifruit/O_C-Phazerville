@@ -5,7 +5,7 @@
 // Two independently-pitched voices (L/R detuned apart) run through a
 // Moog-style ladder filter with a software VCA envelope.
 //
-// Dig1: trigger/pluck   CV1: V/Oct pitch   CV2: damping (shortens decay)
+// CV1: V/Oct pitch   CV2 / Trig: assignable trigger source   Decay: encoder only
 
 #include "synth_karplusstrong.h"
 
@@ -31,6 +31,7 @@ public:
         vcaL.level(1.0f);  vcaL.bias(0.0f);  vcaL.rectify(true);
         vcaR.level(1.0f);  vcaR.bias(0.0f);  vcaR.rectify(true);
 
+        trig_cv.Reset();
         UpdateFilter();
         AllowRestart();
     }
@@ -41,16 +42,16 @@ public:
     }
 
     void Controller() override {
-        // Envelope: exponential decay, rate shaped by Decay param + CV2 damping
-        float damp = constrain(decay * 0.01f - damp_cv.InF(), 0.0f, 1.0f);
-        float ticks = 500.0f + damp * 79500.0f;  // ~30ms (0) to ~5s (100)
+        // Envelope: exponential decay shaped by Decay param
+        float d = decay * 0.01f;
+        float ticks = 500.0f + d * 79500.0f;  // ~30ms (0) to ~5s (100)
         env_level *= powf(0.001f, 1.0f / ticks);
         if (env_level < 0.0001f) env_level = 0.0f;
         env_stream.Push(float_to_q15(env_level));
 
-        // Pluck on Dig1 rising edge; use ADC lag to settle CV1 first
-        if (Clock(0)) StartADCLag(0);
-        if (EndOfADCLag(0)) Pluck();
+        // Pluck on rising edge of trigger source (CVInputMap — assign to Dig1,
+        // clock, gate, etc. via the Trig cursor)
+        if (trig_cv.Clock()) Pluck();
     }
 
     void View() override {
@@ -65,31 +66,32 @@ public:
         gfxPrint(pitch_cv);
         gfxEndCursor(cursor == PITCH_CV, false, pitch_cv.InputName());
 
-        // Row 2: decay % and damping CV source
-        gfxPrint(1, 25, "Dec:");
+        // Row 2: trigger source
+        gfxPrint(1, 25, "Trg:");
         gfxStartCursor(25, 25);
+        gfxPrint(trig_cv);
+        gfxEndCursor(cursor == TRIG_CV, false, trig_cv.InputName());
+
+        // Row 3: decay
+        gfxPrint(1, 35, "Dec:");
+        gfxStartCursor(25, 35);
         graphics.printf("%3d%%", decay);
         gfxEndCursor(cursor == DECAY);
-        gfxStartCursor();
-        gfxPrint(damp_cv);
-        gfxEndCursor(cursor == DAMP_CV, false, damp_cv.InputName());
 
-        // Row 3: filter brightness
-        gfxPrint(1, 35, "Brt:");
-        gfxStartCursor(25, 35);
+        // Row 4: filter brightness
+        gfxPrint(1, 45, "Brt:");
+        gfxStartCursor(25, 45);
         PrintBrightnessHz();
         gfxEndCursor(cursor == BRIGHTNESS);
 
-        // Row 4: filter body / resonance
-        gfxPrint(1, 45, "Bod:");
-        gfxStartCursor(25, 45);
-        graphics.printf("%3d%%", body);
+        // Row 5: body and detune packed together
+        gfxPrint(1, 55, "B:");
+        gfxStartCursor(13, 55);
+        graphics.printf("%3d", body);
         gfxEndCursor(cursor == BODY);
-
-        // Row 5: stereo detune
-        gfxPrint(1, 55, "Det:");
-        gfxStartCursor(25, 55);
-        graphics.printf("%3dct", detune);
+        gfxPrint(" D:");
+        gfxStartCursor();
+        graphics.printf("%2d", detune);
         gfxEndCursor(cursor == DETUNE);
 
         gfxDisplayInputMapEditor();
@@ -98,7 +100,7 @@ public:
     void OnButtonPress() override {
         if (CheckEditInputMapPress(cursor,
               IndexedInput(PITCH_CV, pitch_cv),
-              IndexedInput(DAMP_CV,  damp_cv)))
+              IndexedInput(TRIG_CV,  trig_cv)))
             return;
         CursorToggle();
     }
@@ -119,11 +121,11 @@ public:
             case PITCH_CV:
                 pitch_cv.ChangeSource(direction);
                 break;
+            case TRIG_CV:
+                trig_cv.ChangeSource(direction);
+                break;
             case DECAY:
                 decay = constrain(decay + direction, 0, 100);
-                break;
-            case DAMP_CV:
-                damp_cv.ChangeSource(direction);
                 break;
             case BRIGHTNESS:
                 brightness = constrain(brightness + direction, 0, 100);
@@ -141,12 +143,12 @@ public:
 
     void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(pitch, decay, brightness, body, detune);
-        data[1] = PackPackables(pitch_cv, damp_cv);
+        data[1] = PackPackables(pitch_cv, trig_cv);
     }
 
     void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], pitch, decay, brightness, body, detune);
-        UnpackPackables(data[1], pitch_cv, damp_cv);
+        UnpackPackables(data[1], pitch_cv, trig_cv);
         pitch      = constrain(pitch,      -2*12*128, 5*12*128);
         decay      = constrain(decay,      0, 100);
         brightness = constrain(brightness, 0, 100);
@@ -163,7 +165,7 @@ protected:
 
 private:
     enum Cursor : int8_t {
-        PITCH, PITCH_CV, DECAY, DAMP_CV, BRIGHTNESS, BODY, DETUNE
+        PITCH, PITCH_CV, TRIG_CV, DECAY, BRIGHTNESS, BODY, DETUNE
     };
 
     int8_t  cursor     = PITCH;
@@ -174,7 +176,7 @@ private:
     int8_t  detune     = 10;   // 0–50 cents: L/R pitch spread
 
     CVInputMap pitch_cv;
-    CVInputMap damp_cv;
+    DigitalInputMap trig_cv;
 
     float env_level = 0.0f;
 
