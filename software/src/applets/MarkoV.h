@@ -19,87 +19,98 @@
 // SOFTWARE.
 
 // MarkoV: A Finite State Melodic Generator
-// First-order Markov chain over 8 scale degrees with Tendency Profiles.
+// First-order Markov chain over 10 scale degrees with Tendency Profiles.
 //
 // Digital 1: Clock — advance to next state
 // Digital 2: Reset — short press = replay from seed (same RNG sequence), long press = new random seed
 // CV 1: Chaos — offsets chaos_base upward (0V = pure profile, +V = flatter)
-// CV 2: Transpose — V/Oct offset added to output
+// CV 2: Transpose — V/Oct offset applied BEFORE quantizer (shifts which scale notes are accessed)
 // Out A: Quantized pitch
 // Out B: Trigger pulse when quantized pitch changes
 
 namespace MarkoVData {
 
 // profiles[profile][from_state][to_state]
+// 10 states span root(0) to octave(9): STATE_CV_STEP = ONE_OCTAVE/9 per step.
 // Weights use 20:1 ratios so profiles sound clearly different.
 // At chaos=0 the dominant weights dominate hard; at chaos=100 all → 8 (flat).
-static const uint8_t profiles[5][8][8] = {
+static const uint8_t profiles[5][10][10] = {
     // 0: Pentatonic Stability
-    // Root(0) and fifth(4) are overwhelmingly preferred from any state.
-    // Octave(7) is a common arrival point. All other steps are rare.
+    // Root(0) and fifth(4) are strong attractors from any state.
+    // Octave(9) is a common arrival point. High states (7-9) fall back down.
     {
-        { 20,  2,  3,  1, 18,  1,  1,  8 }, // from 0 (root)
-        { 18,  2, 14,  1, 16,  1,  1,  3 }, // from 1 (2nd)
-        { 14,  1,  5,  1, 18,  1,  1,  6 }, // from 2 (3rd)
-        {  8,  1,  4,  2, 20,  3,  1,  2 }, // from 3 (4th)
-        { 20,  1,  3,  1, 18,  1,  1, 12 }, // from 4 (5th)
-        { 16,  1,  4,  1, 14,  2,  1,  8 }, // from 5 (6th)
-        { 20,  1,  2,  1, 12,  1,  1,  2 }, // from 6 (7th) — resolves to root
-        { 18,  3,  4,  1, 14,  1,  1,  5 }, // from 7 (oct) — falls back to root/5th
+        { 20,  2,  3,  1, 18,  1,  1,  1,  1,  8 }, // from 0 (root)
+        { 18,  2, 14,  1, 16,  1,  1,  1,  1,  2 }, // from 1 (2nd)
+        { 14,  1,  5,  1, 18,  1,  1,  1,  1,  4 }, // from 2 (3rd)
+        {  8,  1,  4,  2, 20,  3,  1,  1,  1,  2 }, // from 3 (4th)
+        { 20,  1,  3,  1, 18,  1,  1,  4,  2,  8 }, // from 4 (5th)
+        { 16,  1,  4,  1, 14,  2,  1,  2,  1,  5 }, // from 5 (6th)
+        { 20,  1,  2,  1, 12,  1,  1,  2,  1,  1 }, // from 6 (7th) — resolves to root
+        { 18,  2,  3,  1, 14,  1,  1,  4,  2,  2 }, // from 7 — falls back
+        { 16,  2,  3,  1, 12,  1,  1,  3,  2,  2 }, // from 8 — falls back
+        { 18,  3,  4,  1, 14,  1,  1,  4,  3,  5 }, // from 9 (oct) — root/5th
     },
     // 1: Chromatic Tension
     // Stepwise motion dominates (±1 state). Repeating a note is common.
-    // Leaps are very rare, creating a snake-like melodic line.
+    // Leaps are very rare — snake-like line now extended over wider range.
     {
-        {  8, 20,  1,  1,  1,  1,  1,  4 }, // from 0
-        { 20,  8, 20,  1,  1,  1,  1,  1 }, // from 1
-        {  1, 20,  8, 20,  1,  1,  1,  1 }, // from 2
-        {  1,  1, 20,  8, 20,  1,  1,  1 }, // from 3
-        {  1,  1,  1, 20,  8, 20,  1,  1 }, // from 4
-        {  1,  1,  1,  1, 20,  8, 20,  1 }, // from 5
-        {  1,  1,  1,  1,  1, 20,  8, 20 }, // from 6
-        {  4,  1,  1,  1,  1,  1, 20,  8 }, // from 7
+        {  8, 20,  1,  1,  1,  1,  1,  1,  1,  4 }, // from 0
+        { 20,  8, 20,  1,  1,  1,  1,  1,  1,  1 }, // from 1
+        {  1, 20,  8, 20,  1,  1,  1,  1,  1,  1 }, // from 2
+        {  1,  1, 20,  8, 20,  1,  1,  1,  1,  1 }, // from 3
+        {  1,  1,  1, 20,  8, 20,  1,  1,  1,  1 }, // from 4
+        {  1,  1,  1,  1, 20,  8, 20,  1,  1,  1 }, // from 5
+        {  1,  1,  1,  1,  1, 20,  8, 20,  1,  1 }, // from 6
+        {  1,  1,  1,  1,  1,  1, 20,  8, 20,  1 }, // from 7
+        {  1,  1,  1,  1,  1,  1,  1, 20,  8, 20 }, // from 8
+        {  4,  1,  1,  1,  1,  1,  1,  1, 20,  8 }, // from 9
     },
     // 2: Jazz Tendencies
     // Strong pull toward the 7th(6) from almost anywhere — the defining
-    // jazz gesture. Root resolution is strong from 6. Tritone sub from 3.
-    // Octave leaps and 3rd arrivals are common secondary moves.
+    // jazz gesture. Root resolution strong from 6. States 7-9 are upper
+    // extensions (9th, #11, 13th) that add tension then resolve.
     {
-        {  4,  1,  6,  1,  5,  1, 20,  4 }, // from 0 — leap to 7th
-        {  4,  1, 12,  1,  4,  1, 18,  4 }, // from 1 — 3rd or 7th
-        {  4,  1,  4,  1,  6,  1, 20,  4 }, // from 2 — leap to 7th
-        {  2,  1,  4,  1,  3,  1, 22,  4 }, // from 3 — tritone pull to 7th
-        { 10,  1,  4,  1,  4,  1, 14, 14 }, // from 4 — root or octave
-        {  4,  1,  8,  1,  4,  1, 18,  6 }, // from 5 — 3rd or 7th
-        { 22,  1,  4,  3,  5,  1,  4,  4 }, // from 6 — strong resolve to root
-        { 14,  1,  4,  1,  8,  1, 14,  4 }, // from 7 — fall back, leap to 7th
+        {  4,  1,  6,  1,  5,  1, 20,  3,  2,  3 }, // from 0 — leap to 7th
+        {  4,  1, 12,  1,  4,  1, 18,  2,  2,  2 }, // from 1 — 3rd or 7th
+        {  4,  1,  4,  1,  6,  1, 20,  3,  2,  2 }, // from 2 — leap to 7th
+        {  2,  1,  4,  1,  3,  1, 22,  3,  2,  2 }, // from 3 — tritone pull to 7th
+        { 10,  1,  4,  1,  4,  1, 14, 10,  4,  4 }, // from 4 — root or upper
+        {  4,  1,  8,  1,  4,  1, 18,  4,  3,  3 }, // from 5 — 3rd or 7th
+        { 22,  1,  4,  3,  5,  1,  4,  3,  2,  2 }, // from 6 — strong resolve to root
+        { 14,  1,  4,  1,  8,  1, 10,  4,  4,  4 }, // from 7 — upper, resolve
+        { 10,  1,  4,  1,  6,  1, 14,  5,  3,  4 }, // from 8 — pull to 7th
+        { 12,  1,  4,  1,  8,  1, 12,  4,  4,  4 }, // from 9 — fall or leap to 7th
     },
     // 3: Glacial
-    // Stays on current note most of the time. Only adjacent steps are possible moves.
-    // Root and fifth are the only attractors; all leaps are nearly impossible.
+    // Stays on current note most of the time. Only adjacent steps are possible.
+    // Root and fifth are the only attractors; leaps are nearly impossible.
     {
-        { 20, 10,  1,  1, 10,  1,  1,  4 }, // from 0 (root)
-        { 14, 18, 10,  1,  4,  1,  1,  1 }, // from 1
-        {  8, 10, 18, 10,  4,  1,  1,  1 }, // from 2
-        {  6,  1, 10, 18, 10,  1,  1,  1 }, // from 3
-        { 12,  1,  1, 10, 20,  8,  1,  1 }, // from 4 (fifth)
-        {  6,  1,  1,  1,  8, 18, 10,  1 }, // from 5
-        { 14,  1,  1,  1,  4,  8, 16,  6 }, // from 6 (7th resolves to root)
-        { 12,  1,  1,  1,  8,  1,  6, 18 }, // from 7 (oct)
+        { 20, 10,  1,  1, 10,  1,  1,  2,  1,  1 }, // from 0 (root)
+        { 14, 18, 10,  1,  4,  1,  1,  1,  1,  1 }, // from 1
+        {  8, 10, 18, 10,  4,  1,  1,  1,  1,  1 }, // from 2
+        {  6,  1, 10, 18, 10,  1,  1,  1,  1,  1 }, // from 3
+        { 12,  1,  1, 10, 20,  8,  1,  1,  1,  1 }, // from 4 (fifth)
+        {  6,  1,  1,  1,  8, 18, 10,  1,  1,  1 }, // from 5
+        { 14,  1,  1,  1,  4,  8, 16,  5,  1,  1 }, // from 6 (7th resolves to root)
+        { 10,  1,  1,  1,  6,  1,  6, 18, 10,  1 }, // from 7
+        {  8,  1,  1,  1,  4,  1,  1,  8, 18, 10 }, // from 8
+        { 10,  1,  1,  1,  4,  1,  1,  4,  8, 18 }, // from 9 (oct)
     },
     // 4: Drone
     // Overwhelming self-loop weight (~83%). No attractors.
     // The note barely ever changes — Out B stays silent unless chaos is raised.
     // Adjacent ±1 steps are the only realistic escape.
     {
-        { 40,  2,  1,  1,  1,  1,  1,  1 }, // from 0 (root)
-        {  2, 40,  2,  1,  1,  1,  1,  1 }, // from 1
-        {  1,  2, 40,  2,  1,  1,  1,  1 }, // from 2
-        {  1,  1,  2, 40,  2,  1,  1,  1 }, // from 3
-        {  1,  1,  1,  2, 40,  2,  1,  1 }, // from 4
-        {  1,  1,  1,  1,  2, 40,  2,  1 }, // from 5
-        {  1,  1,  1,  1,  1,  2, 40,  2 }, // from 6
-        {  1,  1,  1,  1,  1,  1,  2, 40 }, // from 7 (oct)
+        { 40,  2,  1,  1,  1,  1,  1,  1,  1,  1 }, // from 0 (root)
+        {  2, 40,  2,  1,  1,  1,  1,  1,  1,  1 }, // from 1
+        {  1,  2, 40,  2,  1,  1,  1,  1,  1,  1 }, // from 2
+        {  1,  1,  2, 40,  2,  1,  1,  1,  1,  1 }, // from 3
+        {  1,  1,  1,  2, 40,  2,  1,  1,  1,  1 }, // from 4
+        {  1,  1,  1,  1,  2, 40,  2,  1,  1,  1 }, // from 5
+        {  1,  1,  1,  1,  1,  2, 40,  2,  1,  1 }, // from 6
+        {  1,  1,  1,  1,  1,  1,  2, 40,  2,  1 }, // from 7
+        {  1,  1,  1,  1,  1,  1,  1,  2, 40,  2 }, // from 8
+        {  1,  1,  1,  1,  1,  1,  1,  1,  2, 40 }, // from 9 (oct)
     },
 };
 
@@ -111,12 +122,12 @@ static const char* const cursor_labels[4]  = { "Matrix", "Scale", "Chaos", "Seed
 
 class MarkoV : public HemisphereApplet {
 public:
-    static constexpr int      NUM_STATES       = 8;
+    static constexpr int      NUM_STATES       = 10;
     static constexpr int      NUM_PROFILES     = 5;
     static constexpr int      HISTORY_SIZE     = 8;
     static constexpr uint32_t LONG_PRESS_TICKS = 5000;
-    // CV units per state step: spans root to octave across 8 states
-    static constexpr int      STATE_CV_STEP    = ONE_OCTAVE / 7;
+    // CV units per state step: spans root(0) to octave(9) across 10 states
+    static constexpr int      STATE_CV_STEP    = ONE_OCTAVE / 9;
 
     // Cursor positions
     static constexpr int CURSOR_MATRIX = 0;
@@ -186,18 +197,20 @@ public:
             // Map chaos_pct (0-100) to fixed-point 0-256 for NextState
             int chaos    = (chaos_pct * 256) / 100;
 
-            // CV 2: Transpose (V/Oct raw value)
+            // CV 2: Transpose — applied before quantizer so it shifts which
+            // scale notes are accessed rather than transposing post-quantization.
+            // Small CV jitter on In(1) is absorbed by the quantizer's note-snapping.
             int transpose = In(1);
 
             // Advance the Markov chain
             state = NextState(state, chaos);
 
-            // Output A: quantize through user-selected quantizer + V/Oct transpose
-            int pitch_cv = HS::Quantize(qselect, state * STATE_CV_STEP);
-            Out(0, pitch_cv + transpose);
+            // Output A: transpose added before quantization; the quantizer maps
+            // the transposed position to the nearest scale note.
+            int pitch_cv = HS::Quantize(qselect, state * STATE_CV_STEP + transpose);
+            Out(0, pitch_cv);
 
-            // Output B: trigger only when the quantized pitch changes (ignore transpose
-            // jitter — comparing pitch_cv keeps the trigger stable when CV 2 is noisy)
+            // Output B: trigger when quantized pitch (including transpose) changes
             if (pitch_cv != prev_cv) ClockOut(1);
             prev_cv = pitch_cv;
 
@@ -304,21 +317,21 @@ public:
     uint64_t OnDataRequest() {
         uint64_t data = 0;
         Pack(data, PackLocation{0,  3}, profile);    // 3 bits for 5 profiles
-        Pack(data, PackLocation{3,  3}, state);
-        Pack(data, PackLocation{6,  2}, qselect);
-        Pack(data, PackLocation{8,  7}, chaos_base);
-        Pack(data, PackLocation{15, 3}, seed);
-        Pack(data, PackLocation{18, 32}, rng_seed);
+        Pack(data, PackLocation{3,  4}, state);      // 4 bits for 10 states (0-9)
+        Pack(data, PackLocation{7,  2}, qselect);
+        Pack(data, PackLocation{9,  7}, chaos_base);
+        Pack(data, PackLocation{16, 4}, seed);       // 4 bits for 10 states (0-9)
+        Pack(data, PackLocation{20, 32}, rng_seed);
         return data;
     }
 
     void OnDataReceive(uint64_t data) {
         profile    = constrain((int)Unpack(data, PackLocation{0,  3}), 0, NUM_PROFILES - 1);
-        state      = constrain((int)Unpack(data, PackLocation{3,  3}), 0, NUM_STATES - 1);
-        qselect    = constrain((int)Unpack(data, PackLocation{6,  2}), 0, QUANT_CHANNEL_COUNT - 1);
-        chaos_base = constrain((int)Unpack(data, PackLocation{8,  7}), 0, 100);
-        seed       = constrain((int)Unpack(data, PackLocation{15, 3}), 0, NUM_STATES - 1);
-        rng_seed   = (uint32_t)Unpack(data, PackLocation{18, 32});
+        state      = constrain((int)Unpack(data, PackLocation{3,  4}), 0, NUM_STATES - 1);
+        qselect    = constrain((int)Unpack(data, PackLocation{7,  2}), 0, QUANT_CHANNEL_COUNT - 1);
+        chaos_base = constrain((int)Unpack(data, PackLocation{9,  7}), 0, 100);
+        seed       = constrain((int)Unpack(data, PackLocation{16, 4}), 0, NUM_STATES - 1);
+        rng_seed   = (uint32_t)Unpack(data, PackLocation{20, 32});
     }
 
 protected:
