@@ -75,11 +75,26 @@ CV 1 adds to the encoder-set baseline, so you can set a floor with the encoder a
 
 Each profile is a 10×10 weight table. The **row** is the current state (where you are now); the **column** is a possible next state (where you might go). Higher numbers mean more likely. At Chaos=0 these weights are followed closely; at Chaos=100 they are ignored entirely.
 
-The ten states span one octave evenly: **0** = root through **9** = octave, with states 1–8 as intermediate scale positions. The actual pitches depend on your chosen quantizer and scale. With a 7-note diatonic scale, states map roughly to scale degrees 1–7 plus passing positions; with a 12-note chromatic scale, you can reach 10 of the 12 semitones within the octave. Combining CV 2 transpose with a 12-note scale gives full chromatic coverage.
+The ten states are spaced so that **state 7 = octave** (one step per scale degree of a 7-note scale). States 8 and 9 continue into the second octave as upper extensions — a 9th and a 10th above the root. This means every state maps to a unique pitch on a diatonic scale with no wasted duplicates.
+
+| State | Diatonic scale degree |
+|-------|-----------------------|
+| 0 | Root (1st) |
+| 1 | 2nd |
+| 2 | 3rd |
+| 3 | 4th |
+| 4 | 5th |
+| 5 | 6th |
+| 6 | 7th |
+| 7 | Octave (8th) |
+| 8 | 9th (upper extension) |
+| 9 | 10th (upper extension) |
+
+With a pentatonic or chromatic scale the spacing is different, but states 8–9 always land above the octave. Combining CV 2 transpose with a chromatic scale gives full coverage of any range.
 
 ### S — Stability (Pentatonic)
 
-Root (0) and fifth (4) are overwhelmingly preferred destinations from any position. The chain continuously gravitates back to these two anchors. The octave (9) is a common secondary arrival. The upper states (7–9) all tend to fall back down toward root and fifth rather than continuing to climb.
+Root (0) and fifth (4) are overwhelmingly preferred destinations from any position. The chain continuously gravitates back to these two anchors. The octave (7) is a common secondary arrival. States 8–9 (upper extensions) tend to fall back down toward root and fifth rather than continuing to climb.
 
 Produces melodies that orbit the root and fifth — characteristic of folk, modal, and drone-adjacent music. Even with moderate Chaos, the tonal centre stays very clear. Best with a pentatonic or similarly open scale.
 
@@ -91,7 +106,7 @@ Works well when the quantizer includes close intervals (chromatic, whole-tone). 
 
 ### J — Jazz Tendencies
 
-The seventh (state 6) exerts a strong gravitational pull from almost every position. From the seventh, the root is the overwhelmingly likely resolution — the core jazz gesture of tension toward the 7th and release to root. States 7–9 act as upper extensions (9th, sharp 11th, 13th territory): the chain can climb into them for added tension, then pull back toward the 7th and root.
+The seventh (state 6) exerts a strong gravitational pull from almost every position. From the seventh, the root is the overwhelmingly likely resolution — the core jazz gesture of tension toward the 7th and release to root. The octave (7) and upper extensions (8–9) act as a 9th and 10th: the chain can climb into them for added tension, then pull back toward the 7th and root.
 
 Use a Dorian, Mixolydian, or Lydian dominant scale to put the 7th in the right harmonic position. The upper states become particularly expressive with a full 7-note or chromatic scale.
 
@@ -141,7 +156,7 @@ Same as rotating the encoder on Seed: generates a new seed and jumps to it.
 ──────────────────────       ← baseline
 ```
 
-The bar graph shows the last 8 states. Bar height represents scale degree — state 0 = minimum height, state 9 = full height. This is a history readout only; it does not predict future steps.
+The bar graph shows the last 8 states. Bar height represents scale degree — state 0 = minimum height, state 9 = full height (upper extension). This is a history readout only; it does not predict future steps.
 
 ---
 
@@ -154,7 +169,7 @@ The bar graph shows the last 8 states. Bar height represents scale degree — st
 - **Chaos as a performance arc:** Start at 0% and gradually increase over a long section to move from composed tendency to free randomness, then snap back with a seed reset.
 - **Pair with MarkovPerc:** Run both from the same clock. MarkovPerc drives rhythm and accent; MarkoV drives pitch. The profile names (S/T/J) are intentionally parallel — matching moods on both creates coherent ensemble textures.
 - **Transpose with a sequencer:** Patch a step sequencer into CV 2 to move MarkoV into different regions of the scale at section boundaries. Because transpose is applied before quantization, each step value snaps to a scale note rather than a raw chromatic interval — the transposition stays musical regardless of scale choice.
-- **Chromatic scale + transpose CV:** Set the quantizer to a 12-note chromatic scale and use CV 2 to shift the 10-state range up or down. The 10 states cover 10 of the 12 chromatic semitones; a small transpose offset gives full coverage.
+- **Chromatic scale + transpose CV:** Set the quantizer to a 12-note chromatic scale and use CV 2 to shift the range up or down. States 0–7 span just over an octave chromatically; states 8–9 reach a minor 10th above root. A small transpose offset gives full coverage of any target range.
 
 ---
 
