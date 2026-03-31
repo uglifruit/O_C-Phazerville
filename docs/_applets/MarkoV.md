@@ -38,7 +38,7 @@ The key quality is *stylistic coherence without a loop*: the chain gravitates to
 
 **CV 1 (Chaos offset):** Adds to the encoder-set Chaos baseline. When nothing is patched and the source is set to None, it has no effect. If the source is set to a channel with nothing plugged in, the floating ADC input may read high and push Chaos toward 100% — set CV 1 source to **None** when not using it.
 
-**CV 2 (Transpose):** Raw V/Oct offset added after quantization. The trigger comparison is made before transpose is applied, so CV 2 jitter does not cause spurious triggers. Patch a sequencer here to transpose the entire Markov melody between keys in real time.
+**CV 2 (Transpose):** V/Oct offset applied *before* quantization. This means transpose shifts which scale notes are accessed rather than moving the output by a raw chromatic interval. On a pentatonic scale, +1V moves each Markov position to the next pentatonic degree; on a chromatic scale it moves by semitones. Patch a sequencer here to move MarkoV into a different region of the scale at section boundaries.
 
 ---
 
@@ -73,39 +73,39 @@ CV 1 adds to the encoder-set baseline, so you can set a floor with the encoder a
 
 ## The Five Profiles (Transition Matrices)
 
-Each profile is an 8×8 weight table. The **row** is the current state (where you are now); the **column** is a possible next state (where you might go). Higher numbers mean more likely. At Chaos=0 these weights are followed closely; at Chaos=100 they are ignored entirely.
+Each profile is a 10×10 weight table. The **row** is the current state (where you are now); the **column** is a possible next state (where you might go). Higher numbers mean more likely. At Chaos=0 these weights are followed closely; at Chaos=100 they are ignored entirely.
 
-The eight states are scale degrees: **0** = root, **1** = 2nd, **2** = 3rd, **3** = 4th, **4** = 5th, **5** = 6th, **6** = 7th, **7** = octave. The actual pitches depend on your chosen quantizer and scale.
+The ten states span one octave evenly: **0** = root through **9** = octave, with states 1–8 as intermediate scale positions. The actual pitches depend on your chosen quantizer and scale. With a 7-note diatonic scale, states map roughly to scale degrees 1–7 plus passing positions; with a 12-note chromatic scale, you can reach 10 of the 12 semitones within the octave. Combining CV 2 transpose with a 12-note scale gives full chromatic coverage.
 
 ### S — Stability (Pentatonic)
 
-Root (0) and fifth (4) are overwhelmingly preferred destinations from any position. The chain continuously gravitates back to these two anchors. The octave (7) is a common secondary arrival. All other steps are rare.
+Root (0) and fifth (4) are overwhelmingly preferred destinations from any position. The chain continuously gravitates back to these two anchors. The octave (9) is a common secondary arrival. The upper states (7–9) all tend to fall back down toward root and fifth rather than continuing to climb.
 
 Produces melodies that orbit the root and fifth — characteristic of folk, modal, and drone-adjacent music. Even with moderate Chaos, the tonal centre stays very clear. Best with a pentatonic or similarly open scale.
 
 ### T — Tension (Chromatic)
 
-Stepwise motion dominates: from any position the most likely moves are ±1 state, with the current note also common (repetition). Leaps are very rare. The chain produces snake-like lines that creep up or down through the range.
+Stepwise motion dominates: from any position the most likely moves are ±1 state, with the current note also common (repetition). Leaps are very rare. With 10 states the snake-like lines can now travel a fuller range before wrapping, giving longer ascending or descending runs before gravity pulls them back.
 
 Works well when the quantizer includes close intervals (chromatic, whole-tone). With a sparse scale the steps become larger intervals. Add Chaos to occasionally break out of the current direction of travel.
 
 ### J — Jazz Tendencies
 
-The seventh (state 6) exerts a strong gravitational pull from almost every position — many rows weight it very highly. From the seventh, the root is the overwhelmingly likely resolution. This creates the core jazz gesture: tension toward the 7th, release to root, repeat with variation.
+The seventh (state 6) exerts a strong gravitational pull from almost every position. From the seventh, the root is the overwhelmingly likely resolution — the core jazz gesture of tension toward the 7th and release to root. States 7–9 act as upper extensions (9th, sharp 11th, 13th territory): the chain can climb into them for added tension, then pull back toward the 7th and root.
 
-Secondary tendencies include the 3rd (state 2) as a common secondary arrival and an implied tritone pull from the 4th toward the 7th. Use a Dorian, Mixolydian, or Lydian dominant scale to put the 7th in the right harmonic position.
+Use a Dorian, Mixolydian, or Lydian dominant scale to put the 7th in the right harmonic position. The upper states become particularly expressive with a full 7-note or chromatic scale.
 
 ### G — Glacial
 
-Very heavy self-loops: staying on the current note is the most probable move (~40–50%). When the chain does move, only adjacent steps (±1) are possible — leaps are essentially eliminated. Root and fifth remain as attractors when movement finally occurs.
+Very heavy self-loops: staying on the current note is the most probable move (~40–50%). When the chain does move, only adjacent steps (±1) are possible — leaps are essentially eliminated. Root and fifth remain as attractors when movement finally occurs. The upper states drift slowly upward and can hang there before eventually descending.
 
-Suited to very slow clocks and long sustained notes. The chain drifts minimally through a scale, changing direction only rarely. Adding Chaos is particularly effective here — it breaks the self-loops and introduces movement while still preventing leaps.
+Suited to very slow clocks and long sustained notes. Adding Chaos is particularly effective here — it breaks the self-loops and introduces movement while still preventing leaps.
 
 ### D — Drone
 
-The strongest self-loops of any profile: ~83% probability of staying on the current note. No attractors — the chain has no pull toward root, fifth, or any other degree. The only meaningful escapes are ±1 steps, and even these are rare.
+The strongest self-loops of any profile: ~83% probability of staying on the current note. No attractors — the chain has no pull toward root, fifth, or any other degree. The only meaningful escapes are ±1 steps, and even these are rare. Now with 10 states, the drone can slowly creep further from its start position before Chaos brings it to life.
 
-**Out B will stay silent for long stretches at Chaos=0.** The note is locked in place. This profile is intended for use with CV 1 Chaos as the primary performance control: at low Chaos you get a sustained drone; sweeping Chaos upward gradually introduces movement and triggers. The transition from silence to occasional movement to active melody all happens within the Chaos range.
+**Out B will stay silent for long stretches at Chaos=0.** The note is locked in place. This profile is intended for use with CV 1 Chaos as the primary performance control: at low Chaos you get a sustained drone; sweeping Chaos upward gradually introduces movement and triggers.
 
 Patch an envelope or LFO into CV 1 to animate the drone into life at musical moments, then let it settle back to stillness.
 
@@ -141,7 +141,7 @@ Same as rotating the encoder on Seed: generates a new seed and jumps to it.
 ──────────────────────       ← baseline
 ```
 
-The bar graph shows the last 8 states. Bar height represents scale degree — state 0 = minimum height, state 7 = full height. This is a history readout only; it does not predict future steps.
+The bar graph shows the last 8 states. Bar height represents scale degree — state 0 = minimum height, state 9 = full height. This is a history readout only; it does not predict future steps.
 
 ---
 
@@ -153,7 +153,8 @@ The bar graph shows the last 8 states. Bar height represents scale degree — st
 - **Jazz profile + Dorian or Mixolydian:** The 7th-degree pull takes on very different character depending on whether the 7th is major or minor. Mixolydian gives a bluesy dominant-7th feel; Dorian gives a cooler, more ambiguous tension.
 - **Chaos as a performance arc:** Start at 0% and gradually increase over a long section to move from composed tendency to free randomness, then snap back with a seed reset.
 - **Pair with MarkovPerc:** Run both from the same clock. MarkovPerc drives rhythm and accent; MarkoV drives pitch. The profile names (S/T/J) are intentionally parallel — matching moods on both creates coherent ensemble textures.
-- **Transpose with a sequencer:** Patch a step sequencer into CV 2 to move MarkoV between keys at section boundaries without changing the quantizer.
+- **Transpose with a sequencer:** Patch a step sequencer into CV 2 to move MarkoV into different regions of the scale at section boundaries. Because transpose is applied before quantization, each step value snaps to a scale note rather than a raw chromatic interval — the transposition stays musical regardless of scale choice.
+- **Chromatic scale + transpose CV:** Set the quantizer to a 12-note chromatic scale and use CV 2 to shift the 10-state range up or down. The 10 states cover 10 of the 12 chromatic semitones; a small transpose offset gives full coverage.
 
 ---
 
