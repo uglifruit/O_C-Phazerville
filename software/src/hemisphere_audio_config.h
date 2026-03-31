@@ -19,6 +19,7 @@
 #include "audio_applets/SamverbApplet.h"
 #include "audio_applets/PhaserApplet.h"
 #include "audio_applets/ThreeBandz.h"
+#include "audio_applets/UgliStringApplet.h"
 
 const size_t NUM_SLOTS = 5;
 
@@ -37,7 +38,8 @@ DMAMEM std::tuple<
   InputApplet<STEREO>,
   PassthruApplet<STEREO>,
   WavPlayerApplet<STEREO>,
-  UpsampledApplet<STEREO>>
+  UpsampledApplet<STEREO>,
+  UgliStringApplet>
     stereo_input_pool;
 DMAMEM std::tuple<
   PassthruApplet<MONO>,
@@ -67,7 +69,8 @@ DMAMEM std::tuple<
   VcaApplet<STEREO>,
   FilterFolderApplet<STEREO>,
   WavPlayerApplet<STEREO>,
-  UpsampledApplet<STEREO>>
+  UpsampledApplet<STEREO>,
+  UgliStringApplet>
     stereo_processors_pool[NUM_SLOTS - 1];
 
 // Helper to extract the tuple type from an array... thanks ChatGPT...
