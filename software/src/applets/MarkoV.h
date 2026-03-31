@@ -31,7 +31,8 @@
 namespace MarkoVData {
 
 // profiles[profile][from_state][to_state]
-// 10 states span root(0) to octave(9): STATE_CV_STEP = ONE_OCTAVE/9 per step.
+// 10 states: 0–7 span one octave (ONE_OCTAVE/7 per step); states 8–9 are upper
+// extensions into the second octave. Every state maps to a unique scale degree.
 // Weights use 20:1 ratios so profiles sound clearly different.
 // At chaos=0 the dominant weights dominate hard; at chaos=100 all → 8 (flat).
 static const uint8_t profiles[5][10][10] = {
@@ -127,7 +128,7 @@ public:
     static constexpr int      HISTORY_SIZE     = 8;
     static constexpr uint32_t LONG_PRESS_TICKS = 5000;
     // CV units per state step: spans root(0) to octave(9) across 10 states
-    static constexpr int      STATE_CV_STEP    = ONE_OCTAVE / 9;
+    static constexpr int      STATE_CV_STEP    = ONE_OCTAVE / 7;
 
     // Cursor positions
     static constexpr int CURSOR_MATRIX = 0;
