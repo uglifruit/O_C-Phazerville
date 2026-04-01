@@ -40,6 +40,7 @@
 #include "applets/ClockSkip.h"
 #include "applets/Combin8.h"
 #include "applets/Compare.h"
+#include "applets/CVWindow.h"
 #include "applets/DivSeq.h"
 #include "applets/DivSeq10.h"
 #include "applets/DrumMap.h"
@@ -165,6 +166,7 @@ AppletRegistry reg{
     DeclareApplet<ClockSkip>{28, 0x04},
     DeclareApplet<Combin8>{82, 0x10},
     DeclareApplet<Compare>{30, 0x10},
+    DeclareApplet<CVWindow>{95, 0x40},
     DeclareApplet<Cumulus>{5, 0x40},
     DeclareApplet<CVRecV2>{24, 0x02},
     DeclareApplet<DivSeq>{68, 0x06},
