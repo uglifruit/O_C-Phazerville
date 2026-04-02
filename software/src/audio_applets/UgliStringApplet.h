@@ -5,8 +5,7 @@
 // Two independently-pitched voices (L/R detuned) through a ladder filter
 // with a software VCA envelope and dry/wet mix.
 //
-// CV1: V/Oct pitch   Trig: assignable trigger   Dec/Brt/Mix: CV-able
-// Body + Detune: encoder + CV via button-press InputMap editor
+// CV1: V/Oct pitch   Trig: assignable trigger   Dec/Brt/Body/Det/Mix: CV-able
 
 #include "synth_karplusstrong.h"
 
@@ -109,40 +108,45 @@ public:
         gfxPrint(brightness_cv);
         gfxEndCursor(cursor == BRIGHTNESS_CV, false, brightness_cv.InputName());
 
-        // Row 5: body (spicy — button press opens CV editor), detune (spicy),
-        //        mix value + CV
-        gfxPrint(1, 55, "B:");
-        gfxStartCursor(13, 55);
-        graphics.printf("%3d", body);
-        gfxEndCursor(cursor == BODY, true);  // spicy: button opens body_cv editor
-
-        gfxPrint(" D:");
-        gfxStartCursor();
-        graphics.printf("%2d", detune);
-        gfxEndCursor(cursor == DETUNE, true);  // spicy: button opens detune_cv editor
-
-        gfxPrint(" M:");
-        gfxStartCursor();
-        graphics.printf("%3d", mix);
-        gfxEndCursor(cursor == MIX);
-        gfxStartCursor();
-        gfxPrint(mix_cv);
-        gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+        // Row 5: context-sensitive — Body+CV | Detune+CV | Mix+CV depending on cursor
+        if (cursor <= BODY_CV) {
+            gfxPrint(1, 55, "Bdy:");
+            gfxStartCursor(25, 55);
+            graphics.printf("%3d", body);
+            gfxEndCursor(cursor == BODY);
+            gfxStartCursor();
+            gfxPrint(body_cv);
+            gfxEndCursor(cursor == BODY_CV, false, body_cv.InputName());
+        } else if (cursor <= DETUNE_CV) {
+            gfxPrint(1, 55, "Det:");
+            gfxStartCursor(25, 55);
+            graphics.printf("%2d", detune);
+            gfxEndCursor(cursor == DETUNE);
+            gfxStartCursor();
+            gfxPrint(detune_cv);
+            gfxEndCursor(cursor == DETUNE_CV, false, detune_cv.InputName());
+        } else {
+            gfxPrint(1, 55, "Mix:");
+            gfxStartCursor(25, 55);
+            graphics.printf("%3d", mix);
+            gfxEndCursor(cursor == MIX);
+            gfxStartCursor();
+            gfxPrint(mix_cv);
+            gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+        }
 
         gfxDisplayInputMapEditor();
     }
 
     void OnButtonPress() override {
-        // Body and Detune have hidden CVs — button press on those cursors opens
-        // the InputMap editor rather than toggling EditMode.
         if (CheckEditInputMapPress(cursor,
-              IndexedInput(PITCH_CV,     pitch_cv),
-              IndexedInput(TRIG_CV,      trig_cv),
-              IndexedInput(DECAY_CV,     decay_cv),
+              IndexedInput(PITCH_CV,      pitch_cv),
+              IndexedInput(TRIG_CV,       trig_cv),
+              IndexedInput(DECAY_CV,      decay_cv),
               IndexedInput(BRIGHTNESS_CV, brightness_cv),
-              IndexedInput(BODY,         body_cv),    // spicy: button on BODY
-              IndexedInput(DETUNE,       detune_cv),  // spicy: button on DETUNE
-              IndexedInput(MIX_CV,       mix_cv)))
+              IndexedInput(BODY_CV,       body_cv),
+              IndexedInput(DETUNE_CV,     detune_cv),
+              IndexedInput(MIX_CV,        mix_cv)))
             return;
         CursorToggle();
     }
@@ -183,8 +187,14 @@ public:
                 body = constrain(body + direction, 0, 100);
                 UpdateFilter();
                 break;
+            case BODY_CV:
+                body_cv.ChangeSource(direction);
+                break;
             case DETUNE:
                 detune = constrain(detune + direction, 0, 50);
+                break;
+            case DETUNE_CV:
+                detune_cv.ChangeSource(direction);
                 break;
             case MIX:
                 mix = constrain(mix + direction, 0, 100);
@@ -227,8 +237,8 @@ private:
         PITCH, PITCH_CV, TRIG_CV,
         DECAY, DECAY_CV,
         BRIGHTNESS, BRIGHTNESS_CV,
-        BODY,       // spicy — button opens body_cv InputMap editor
-        DETUNE,     // spicy — button opens detune_cv InputMap editor
+        BODY, BODY_CV,
+        DETUNE, DETUNE_CV,
         MIX, MIX_CV
     };
 
