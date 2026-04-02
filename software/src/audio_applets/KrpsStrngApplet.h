@@ -64,19 +64,21 @@ public:
         mixer.gain(0, 1.0f - eff_mix);
         mixer.gain(1, eff_mix);
 
-        // Pluck on trigger rising edge
-        if (trig_cv.Clock()) Pluck();
+        // Pluck on trigger rising edge — StartADCLag defers Pluck() until
+        // the pitch CV has settled (avoids triggering at the previous pitch)
+        if (trig_cv.Clock()) StartADCLag();
+        if (EndOfADCLag()) Pluck();
     }
 
     void View() override {
-        // Row 1: pitch + V/Oct CV source
+        // Row 1: pitch (note = semitone steps, Hz = fine steps) + V/Oct CV source
         gfxStartCursor(1, 15);
         gfxPrintTuningIndicator(pitch);
         gfxEndCursor(cursor == PITCH);
         gfxStartCursor(11, 15);
         gfxPrintPitchHz(pitch);
-        gfxEndCursor(cursor == PITCH);
-        gfxStartCursor();
+        gfxEndCursor(cursor == PITCH_FINE);
+        gfxStartCursor(46, 15);
         gfxPrint(pitch_cv);
         gfxEndCursor(cursor == PITCH_CV, false, pitch_cv.InputName());
 
@@ -89,18 +91,18 @@ public:
         // Row 3: decay + CV
         gfxPrint(1, 35, "Dec:");
         gfxStartCursor(25, 35);
-        graphics.printf("%3d%%", decay);
+        graphics.printf("%3d", decay);
         gfxEndCursor(cursor == DECAY);
-        gfxStartCursor();
+        gfxStartCursor(46, 35);
         gfxPrint(decay_cv);
         gfxEndCursor(cursor == DECAY_CV, false, decay_cv.InputName());
 
         // Row 4: brightness + CV
-        gfxPrint(1, 45, "Brt:");
-        gfxStartCursor(25, 45);
+        gfxPrint(1, 45, "Br:");
+        gfxStartCursor(19, 45);
         PrintBrightnessHz();
         gfxEndCursor(cursor == BRIGHTNESS);
-        gfxStartCursor();
+        gfxStartCursor(46, 45);
         gfxPrint(brightness_cv);
         gfxEndCursor(cursor == BRIGHTNESS_CV, false, brightness_cv.InputName());
 
@@ -110,7 +112,7 @@ public:
             gfxStartCursor(25, 55);
             graphics.printf("%3d", body);
             gfxEndCursor(cursor == BODY);
-            gfxStartCursor();
+            gfxStartCursor(46, 55);
             gfxPrint(body_cv);
             gfxEndCursor(cursor == BODY_CV, false, body_cv.InputName());
         } else {
@@ -118,7 +120,7 @@ public:
             gfxStartCursor(25, 55);
             graphics.printf("%3d", mix);
             gfxEndCursor(cursor == MIX);
-            gfxStartCursor();
+            gfxStartCursor(46, 55);
             gfxPrint(mix_cv);
             gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
         }
@@ -150,6 +152,9 @@ public:
         switch (cursor) {
             case PITCH:
                 pitch = constrain(pitch + direction * 128, MIN_PITCH, MAX_PITCH);
+                break;
+            case PITCH_FINE:
+                pitch = constrain(pitch + direction * 4, MIN_PITCH, MAX_PITCH);
                 break;
             case PITCH_CV:
                 pitch_cv.ChangeSource(direction);
@@ -214,7 +219,7 @@ protected:
 
 private:
     enum Cursor : int8_t {
-        PITCH, PITCH_CV, TRIG_CV,
+        PITCH, PITCH_FINE, PITCH_CV, TRIG_CV,
         DECAY, DECAY_CV,
         BRIGHTNESS, BRIGHTNESS_CV,
         BODY, BODY_CV,
@@ -267,10 +272,10 @@ private:
     void PrintBrightnessHz() {
         int hz = (int)(200.0f * powf(100.0f, brightness * 0.01f));
         if (hz < 1000)
-            graphics.printf("%dHz", hz);
+            graphics.printf("%3dH", hz);           // e.g. "200H"  (4 chars)
         else if (hz < 10000)
-            graphics.printf("%d.%dkHz", hz / 1000, (hz % 1000) / 100);
+            graphics.printf("%d.%dk", hz / 1000, (hz % 1000) / 100); // e.g. "3.1k"
         else
-            graphics.printf("%dkHz", hz / 1000);
+            graphics.printf("%3dk", hz / 1000);    // e.g. " 20k"  (4 chars)
     }
 };
