@@ -133,21 +133,29 @@ public:
     ONE_POLE(smooth_delay_, target_delay_, 0.25f);
 
     // --- Pitch-compensated loop gain (computed once per block) -----------
-    // Map decay param to target time: T = 0.05 * e^(d * ln300)  [0.05 s…15 s]
+    // Map decay param to target time: T = 0.002 * e^(d * ln3000)  [0.002 s…6 s]
+    // Min 0.002 s → RT60 ≈ 14 ms (very short staccato). Max 6 s → RT60 ≈ 41 s.
     // fastexp from dsputils fastapprox library
-    float T_s = 0.05f * fastexp(decay_param_ * 5.7038f);  // ln(300) ≈ 5.7038
+    float T_s = 0.002f * fastexp(decay_param_ * 8.006f);  // ln(3000) ≈ 8.006
     // ρ = exp(-1 / (T_s * fs))  — apply once per sample.
     // Over one period L the combined gain is ρ^L = exp(-L/(T_s*fs)), giving
     // perceptual decay time ≈ T_s regardless of pitch (pitch-compensated).
     // Do NOT include L in the exponent — that would apply a full period's
     // attenuation on every sample, decaying the string L× too fast.
     float loop_gain = expf(-1.0f / (T_s * AUDIO_SAMPLE_RATE_EXACT));
-    // Hard cap: system must stay stable regardless of parameter extremes
-    if (loop_gain > 0.99999f) loop_gain = 0.99999f;
+    // Hard cap: system must stay stable regardless of parameter extremes.
+    // Max legitimate gain at T_s=15 s is exp(-1/(15*44100)) ≈ 0.9999985 — keep
+    // cap above that so the full decay range is usable.
+    if (loop_gain > 0.9999990f) loop_gain = 0.9999990f;
 
     // --- Handle pending trigger (fills delay line with excited noise) -----
     if (trigger_pending_) {
       trigger_pending_ = false;
+      // Snap to target pitch immediately so exciteString() fills the delay
+      // line at the correct length. Without this, the one-pole smoother is
+      // still mid-transition on a large pitch jump, causing the string to
+      // slide from the previous pitch rather than start at the new one.
+      smooth_delay_ = target_delay_;
       exciteString(trigger_velocity_);
     }
 
@@ -158,9 +166,16 @@ public:
       float read_pos = static_cast<float>(write_idx_) - smooth_delay_;
       if (read_pos < 0.0f) read_pos += static_cast<float>(BUFFER_SIZE);
 
-      uint32_t r0  = static_cast<uint32_t>(read_pos) & BUFFER_MASK;
-      uint32_t r1  = (r0 + 1) & BUFFER_MASK;
-      float    frac = read_pos - static_cast<float>(r0);
+      // Extract fractional part from the UNMASKED floor of read_pos.
+      // After the negative-wrap guard, read_pos can be up to ~8190 (when
+      // write_idx_ is near 4095 and smooth_delay_ is near BUFFER_SIZE).
+      // r0_raw may therefore exceed BUFFER_MASK. frac MUST be computed from
+      // r0_raw; using (r0_raw & BUFFER_MASK) instead would give frac ≈ 4096
+      // and corrupt the interpolation.
+      uint32_t r0_raw = static_cast<uint32_t>(read_pos);
+      float    frac   = read_pos - static_cast<float>(r0_raw);
+      uint32_t r0     = r0_raw & BUFFER_MASK;
+      uint32_t r1     = (r0 + 1) & BUFFER_MASK;
 
       // Linear interpolation for sub-sample accuracy (resolves pitch quantization)
       float raw = delay_line_[r0] + frac * (delay_line_[r1] - delay_line_[r0]);
@@ -173,9 +188,11 @@ public:
       // Pitch-compensated loop gain (Decay)
       float new_sample = filtered * loop_gain;
 
-      // Write back: delay line values live in q15 float units (±32767)
-      delay_line_[write_idx_ & BUFFER_MASK] = new_sample;
-      write_idx_++;
+      // Write back: delay line values live in q15 float units (±32767).
+      // Keep write_idx_ masked (0–4095) so float(write_idx_) stays within
+      // float32's exact integer range; avoids precision loss after ~6 min.
+      delay_line_[write_idx_] = new_sample;
+      write_idx_ = (write_idx_ + 1) & BUFFER_MASK;
 
       out->data[i] = Clip16(new_sample);
     }
@@ -186,10 +203,17 @@ public:
 
 private:
   // -----------------------------------------------------------------------
-  // Excitation: fill the delay line with body-filtered noise.
-  // This implements "commuted synthesis": rather than injecting plain noise,
-  // the noise is pre-filtered through a resonant bandpass that simulates the
-  // acoustic body impedance before the signal enters the string model.
+  // Excitation: fill the delay line with a noise/sine blend controlled by
+  // body_param_. body=0 gives pure white noise (bright, percussive attack).
+  // body=1 gives a pure sine at the string fundamental (clean, smooth attack).
+  // Middle values crossfade linearly, giving an audible sweep from noisy to
+  // pure across the full 0–100 display range.
+  //
+  // This is distinct from Brightness, which shapes the ongoing feedback IIR
+  // (affects sustain/timbre). Body affects the attack transient only.
+  //
+  // sinf is called once per note-on (not per-block), so even for the lowest
+  // pitch (n ≈ 2205) the cost is ~110 µs — well within the 2.9 ms budget.
   // -----------------------------------------------------------------------
   void exciteString(float velocity) {
     // Number of samples to fill = one full period (≈ delay_length)
@@ -201,31 +225,11 @@ private:
     memset(delay_line_, 0, BUFFER_SIZE * sizeof(float));
     iir_state_ = 0.0f;
 
-    // --- Body biquad bandpass coefficients --------------------------------
-    // Center frequency = string fundamental; Q scales with body_param.
-    // Q range: 0.5 (almost flat / broadband) → 10.0 (narrow / resonant).
-    float body_freq_hz = AUDIO_SAMPLE_RATE_EXACT / smooth_delay_;
-    float q            = 0.5f + body_param_ * 9.5f;
-
-    static constexpr float KS_TWO_PI = 6.28318530718f;
-    float omega    = KS_TWO_PI * body_freq_hz / AUDIO_SAMPLE_RATE_EXACT;
-    float sin_o    = sinf(omega);
-    float cos_o    = cosf(omega);
-    float alpha_bq = sin_o / (2.0f * q);
-    float a0_inv   = 1.0f / (1.0f + alpha_bq);
-
-    // Standard biquad bandpass (b1 = 0, constant 0 dB peak at centre)
-    float b0 =  alpha_bq * a0_inv;
-    float b2 = -alpha_bq * a0_inv;
-    float a1 = -2.0f * cos_o * a0_inv;
-    float a2 = (1.0f - alpha_bq) * a0_inv;
-
-    // Biquad state (direct form I)
-    float x1 = 0.0f, x2 = 0.0f, y1 = 0.0f, y2 = 0.0f;
-
-    // Scale excitation to q15 float units; compensate bandpass gain drop at
-    // high Q by multiplying through by Q (peak gain ≈ Q for this design)
     float excite_scale = velocity * 32767.0f;
+
+    // Sine step: one full cycle over n samples (= one string period)
+    static constexpr float KS_TWO_PI = 6.28318530718f;
+    float body_omega = KS_TWO_PI / static_cast<float>(n);
 
     for (int i = 0; i < n; i++) {
       // LCG white noise: good spectral flatness, zero allocation overhead
@@ -233,18 +237,15 @@ private:
       float noise = static_cast<float>(static_cast<int32_t>(noise_seed_))
                     * (1.0f / 2147483648.0f);  // [-1.0, 1.0]
 
-      float sample;
-      if (body_param_ < 0.01f) {
-        // body = 0: flat white noise (no body colouration)
-        sample = noise * excite_scale;
-      } else {
-        // Biquad direct form I: y[n] = b0*x[n] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
-        float y = b0 * noise + b2 * x2 - a1 * y1 - a2 * y2;
-        x2 = x1;  x1 = noise;
-        y2 = y1;  y1 = y;
-        // Multiply by Q to normalise the resonant amplitude reduction
-        sample = y * q * excite_scale;
-      }
+      // Sine at fundamental — one full period across the delay line
+      float sine = sinf(body_omega * static_cast<float>(i));
+
+      // body=0 → pure noise (bright/percussive), body=1 → pure sine (clean/smooth)
+      float sample = ((1.0f - body_param_) * noise + body_param_ * sine) * excite_scale;
+
+      // Clamp to q15 float range
+      if (sample >  32767.0f) sample =  32767.0f;
+      if (sample < -32767.0f) sample = -32767.0f;
 
       // Fill positions write_idx_ - n … write_idx_ - 1 (the "past" of the
       // string). Unsigned subtraction + BUFFER_MASK handles all wraparound.
