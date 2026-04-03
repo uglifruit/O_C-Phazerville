@@ -3,7 +3,7 @@ layout: default
 ---
 # KrpsStrng (mono)
 
-A Karplus-Strong physical string synthesizer. Plucks a virtual string by filling a delay line with an excitation burst and feeding it through a resonant feedback loop, producing realistic plucked-string and bass tones with independent control over decay, brightness, and attack character.
+A Karplus-Strong physical string synthesizer. Plucks a virtual string by filling a delay line with an excitation burst and feeding it through a resonant feedback loop, producing plucked-string and bass tones with independent control over decay, brightness, and body character.
 
 ### Parameters
 
@@ -37,4 +37,4 @@ A Karplus-Strong physical string synthesizer. Plucks a virtual string by filling
 
 ### Credits
 
-Authored by uglifruit.
+Authored by uglifruit (Andy Jenkinson) & ClaudeCode
