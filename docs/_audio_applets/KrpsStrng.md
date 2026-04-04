@@ -33,8 +33,18 @@ A Karplus-Strong physical string synthesizer. Plucks a virtual string by filling
 * Set Dcy low and Brt high for a sharp, percussive pizzicato. Set Dcy high and Brt low for a deep, slowly fading tone.
 * Use Bdy to distinguish between strummed (Bdy=0, noisy) and bowed (Bdy=100, pure) articulations — automate with CV for expressive variation.
 * Stack two KrpsStrng applets on L and R channels tuned a few cents apart and blend with the Crosspan applet for a natural chorus/doubling effect.
-* Feed an LFO or envelope into Dcy CV to create notes that swell or fade dynamically, independent of the trigger pattern.
+
 
 ### Credits
 
 Authored by uglifruit (Andy Jenkinson) & ClaudeCode
+
+### License
+
+MIT License — Copyright (c) 2026 Andy Jenkinson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
