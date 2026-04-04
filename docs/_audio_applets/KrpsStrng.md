@@ -13,15 +13,15 @@ A Karplus-Strong physical string synthesizer. Plucks a virtual string by filling
 * Trg: Trigger source. Each incoming gate/clock plucks the string. Pitch CV is sampled at trigger time.
 * Dcy: Decay time — how long the string rings before falling silent. CVable.
     * 0: Very short staccato (~14 ms RT60). Sounds percussive and dry.
-    * 100: Long sustain (~41 s RT60). Sounds almost infinitely sustained.
+    * 100: Long sustain (6 seconds-ish). Sounds almost infinitely sustained.
     * The curve is logarithmic, so the lower half of the range covers the most musically useful short-to-medium decays.
 * Brt: Brightness — controls the tone of the sustained string. CVable.
     * 0: Dark, heavily low-pass filtered. Muted, hollow sound.
     * 100: Bright, full harmonic content. Cutting, present sound.
     * Acts as a tunable IIR low-pass in the feedback loop; affects the entire sustain, not just the attack.
 * Bdy: Body — controls the character of the initial attack transient. CVable.
-    * 0: Pure white noise excitation. Bright, noisy, percussive pluck.
-    * 100: Pure sine wave excitation at the string fundamental. Clean, smooth, bow-like attack.
+    * 0: Bright, noisy, percussive pluck.
+    * 100: Clean, smooth, bow-like attack.
     * Middle values crossfade between the two. Body is independent of Brightness — Body shapes the attack, Brightness shapes the sustain.
 * Mix: Blends between the dry input signal and the KS synthesizer output. CVable.
     * 0: Fully dry (input pass-through, no synthesis).
@@ -31,7 +31,7 @@ A Karplus-Strong physical string synthesizer. Plucks a virtual string by filling
 
 * Route a sequencer's V/Oct output to Pitch CV and its gate to Trg for a melodic plucked bass or lead line.
 * Set Dcy low and Brt high for a sharp, percussive pizzicato. Set Dcy high and Brt low for a deep, slowly fading tone.
-* Use Bdy to distinguish between strummed (Bdy=0, noisy) and bowed (Bdy=100, pure) articulations — automate with CV for expressive variation.
+* Use Bdy to distinguish between articulations — automate with CV for expressive variation.
 * Stack two KrpsStrng applets on L and R channels tuned a few cents apart and blend with the Crosspan applet for a natural chorus/doubling effect.
 
 
