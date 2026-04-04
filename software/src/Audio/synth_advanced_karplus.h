@@ -66,10 +66,8 @@ public:
   // Target fundamental frequency in Hz.
   // One-pole smoothing is applied in update() to avoid zipper noise.
   void setFrequency(float hz) {
-    hz = constrain(hz, MIN_HZ, MAX_HZ);
-    float d = AUDIO_SAMPLE_RATE_EXACT / hz;
-    // Guard: leave at least 2 samples headroom below buffer wraparound
-    target_delay_ = (d < BUFFER_SIZE - 2) ? d : BUFFER_SIZE - 2;
+    target_hz_ = constrain(hz, MIN_HZ, MAX_HZ);
+    recalculateDelay();
   }
 
   // Decay: 0.0 (shortest) → 1.0 (longest).
@@ -88,6 +86,7 @@ public:
     brightness_param_ = constrain(b, 0.0f, 1.0f);
     // Map: 0 → α = 0.05 (very dark), 1 → α = 1.0 (full bright / no filter)
     iir_alpha_ = 0.05f + brightness_param_ * 0.95f;
+    recalculateDelay();
   }
 
   // Body: 0.0 (flat noise excitation) → 1.0 (narrow resonant bandpass).
@@ -229,6 +228,7 @@ private:
   uint32_t write_idx_  = 0;
 
   // --- Pitch smoothing ----------------------------------------------------
+  float target_hz_    = 441.0f;   // stored so setBrightness() can recompute delay
   float target_delay_ = 100.0f;   // samples (≈ 441 Hz default)
   float smooth_delay_ = 100.0f;   // one-pole smoothed version
 
@@ -253,4 +253,18 @@ private:
 
   // --- Noise generation ---------------------------------------------------
   uint32_t noise_seed_ = 0xDEADBEEF;
+
+  // --- Helpers ------------------------------------------------------------
+
+  // Recompute target_delay_ from target_hz_ and the current IIR alpha.
+  // The 1st-order IIR adds (1 - α) / α samples of DC group delay inside
+  // the feedback loop. Subtracting it here keeps pitch accurate across the
+  // full brightness range. Must be called whenever target_hz_ or iir_alpha_
+  // changes (i.e. from setFrequency() and setBrightness()).
+  void recalculateDelay() {
+    float filter_delay = (1.0f - iir_alpha_) / iir_alpha_;
+    float d = AUDIO_SAMPLE_RATE_EXACT / target_hz_ - filter_delay;
+    if (d < 2.0f) d = 2.0f;
+    target_delay_ = (d < BUFFER_SIZE - 2) ? d : BUFFER_SIZE - 2;
+  }
 };
