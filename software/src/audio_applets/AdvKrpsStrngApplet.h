@@ -34,6 +34,7 @@ public:
 
   void Start() override {
     synth.Acquire();
+    adc_lag_ = -1;
 
     PatchCable(input_stream, 0, output_mixer, 0);  // dry path
     PatchCable(synth,        0, output_mixer, 1);  // synth path
@@ -72,9 +73,10 @@ public:
     output_mixer.gain(1, m);
 
     // Trigger with ADC lag: pitch CV must settle before noteOn fires.
-    // StartADCLag() defers EndOfADCLag() by ~33 ticks (~2 ms).
-    if (trig_cv.Clock()) StartADCLag();
-    if (EndOfADCLag()) synth.noteOn(1.0f);
+    // Per-instance countdown avoids sharing frame.adc_lag_countdown[io_offset]
+    // with other AdvKrpsStrng instances on the same side (same hemisphere value).
+    if (trig_cv.Clock()) adc_lag_ = HEMISPHERE_ADC_LAG;
+    if (adc_lag_ > 0 && --adc_lag_ == 0) synth.noteOn(1.0f);
   }
 
   // --- View (64×64 display) ----------------------------------------------
@@ -261,6 +263,10 @@ private:
   int8_t  brightness = 70;
   int8_t  body       = 30;
   int8_t  mix        = 100;             // 0 = fully transparent by default; turn up to add synthesis
+
+  // Per-instance ADC lag counter (-1 = idle). Replaces StartADCLag/EndOfADCLag
+  // to avoid sharing frame.adc_lag_countdown[io_offset] with other instances.
+  int adc_lag_ = -1;
 
   // CV / trigger routing
   CVInputMap     pitch_cv;
