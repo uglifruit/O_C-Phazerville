@@ -124,13 +124,14 @@ public:
     // Map decay param to target time: T = 0.002 * e^(d * ln3000)  [0.002 s…6 s]
     // Min 0.001 s → RT60 ≈ 14 ms (very short staccato). Max 6 s → RT60 ≈ 41 s.
     // fastexp from dsputils fastapprox library
-    float T_s = 0.001f * fastexp(decay_param_ * 8.699f);
+    float T_s = 0.02f * fastexp(decay_param_ * 8.699f);
     // ρ = exp(-1 / (T_s * fs))  — apply once per sample.
     // Over one period L the combined gain is ρ^L = exp(-L/(T_s*fs)), giving
     // perceptual decay time ≈ T_s regardless of pitch (pitch-compensated).
-    // Do NOT include L in the exponent — that would apply a full period's
-    // attenuation on every sample, decaying the string L× too fast.
-    float loop_gain = expf(-1.0f / (T_s * AUDIO_SAMPLE_RATE_EXACT));
+    // INCORRECT Do NOT include L in the exponent — that would apply a full period's
+    // INCORRECT attenuation on every sample, decaying the string L× too fast.
+    // INCORRECT - float loop_gain = expf(-1.0f / (T_s * AUDIO_SAMPLE_RATE_EXACT));
+    float loop_gain = expf(-smooth_delay_ / (T_s * AUDIO_SAMPLE_RATE_EXACT));
     // Hard cap: system must stay stable regardless of parameter extremes.
     // Max legitimate gain at T_s=6 s is exp(-1/(6*44100)) ≈ 0.9999985 — keep
     // cap above that so the full decay range is usable.
