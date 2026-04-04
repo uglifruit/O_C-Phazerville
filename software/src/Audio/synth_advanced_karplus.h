@@ -9,7 +9,7 @@
 //   addresses both limitations.
 //
 // Architecture:
-//   - 4096-sample float32 circular delay line (PSRAM preferred, heap fallback)
+//   - 4096-sample float32 circular delay line (internal heap; avoids QSPI ISR stall)
 //   - Linear fractional interpolation on read: eliminates pitch quantization
 //   - Tunable 1st-order IIR in feedback loop: independent Brightness control
 //   - Pitch-compensated loop gain: perceptual Decay time independent of pitch
@@ -22,10 +22,7 @@
 //   Acquire() / Release(): call from Start() / Unload() in main loop only
 
 #include <Audio.h>
-#include <smalloc.h>
 #include "../dsputils.h"
-
-extern "C" uint8_t external_psram_size;
 
 class AudioSynthAdvancedKarplus : public AudioStream {
 public:
@@ -43,33 +40,24 @@ public:
 
   // --- Lifecycle ---------------------------------------------------------
 
-  // Allocate the delay line. Prefers PSRAM (16 KB there vs heap).
-  // Called from the applet's Start().
+  // Allocate the delay line from internal heap (DTCM/OCRAM).
+  // 16 KB in internal RAM avoids the QSPI stall that PSRAM causes
+  // when memset fires inside the audio ISR. Called from applet Start().
   void Acquire() {
     if (delay_line_) return;
-    if (external_psram_size > 0) {
-      delay_line_ = static_cast<float*>(
-        extmem_calloc(BUFFER_SIZE, sizeof(float))
-      );
-      use_extmem_ = (delay_line_ != nullptr);
-    }
-    if (!delay_line_) {
-      delay_line_ = static_cast<float*>(calloc(BUFFER_SIZE, sizeof(float)));
-      use_extmem_ = false;
-    }
-    // Reset internal state for a clean start
+    delay_line_ = static_cast<float*>(calloc(BUFFER_SIZE, sizeof(float)));
     if (delay_line_) {
-      write_idx_   = 0;
-      iir_state_   = 0.0f;
-      smooth_delay_ = target_delay_;
-      trigger_pending_ = false;
+      write_idx_        = 0;
+      iir_state_        = 0.0f;
+      smooth_delay_     = target_delay_;
+      trigger_pending_  = false;
+      excite_remaining_ = 0;
     }
   }
 
   void Release() {
     if (!delay_line_) return;
-    if (use_extmem_) extmem_free(delay_line_);
-    else             free(delay_line_);
+    free(delay_line_);
     delay_line_ = nullptr;
   }
 
@@ -148,15 +136,26 @@ public:
     // cap above that so the full decay range is usable.
     if (loop_gain > 0.9999990f) loop_gain = 0.9999990f;
 
-    // --- Handle pending trigger (fills delay line with excited noise) -----
+    // --- Handle pending trigger (sets up progressive excitation) ----------
+    // Instead of filling the delay line in one burst (memset + for-loop),
+    // excitation samples are generated one-per-sample inside the main loop
+    // below. This amortizes the sinf() cost across multiple audio blocks and
+    // eliminates the need for a memset entirely.
     if (trigger_pending_) {
       trigger_pending_ = false;
-      // Snap to target pitch immediately so exciteString() fills the delay
-      // line at the correct length. Without this, the one-pole smoother is
-      // still mid-transition on a large pitch jump, causing the string to
-      // slide from the previous pitch rather than start at the new one.
-      smooth_delay_ = target_delay_;
-      exciteString(trigger_velocity_);
+      // Snap to target pitch immediately so excitation fills at correct length.
+      smooth_delay_     = target_delay_;
+      int n = static_cast<int>(smooth_delay_);
+      if (n < 2)                              n = 2;
+      if (n >= static_cast<int>(BUFFER_SIZE)) n = BUFFER_SIZE - 1;
+      excite_remaining_ = n;
+      excite_phase_     = 0.0f;
+      excite_phase_inc_ = KS_TWO_PI / static_cast<float>(n);
+      excite_scale_     = trigger_velocity_ * 32767.0f;
+      // Reset IIR state so stale delay-line data cannot poison the filter
+      // during the excitation phase (read head still sees old audio for the
+      // first period before freshly written samples come back around).
+      iir_state_ = 0.0f;
     }
 
     // --- Per-sample KS feedback loop -------------------------------------
@@ -180,13 +179,33 @@ public:
       // Linear interpolation for sub-sample accuracy (resolves pitch quantization)
       float raw = delay_line_[r0] + frac * (delay_line_[r1] - delay_line_[r0]);
 
-      // 1st-order IIR low-pass (Brightness)
-      //   y[n] = α * x[n] + (1 - α) * y[n-1]
-      float filtered  = iir_alpha_ * raw + (1.0f - iir_alpha_) * iir_state_;
-      iir_state_      = filtered;
+      float new_sample;
 
-      // Pitch-compensated loop gain (Decay)
-      float new_sample = filtered * loop_gain;
+      if (excite_remaining_ > 0) {
+        // Excitation phase: generate one noise/sine sample and write it
+        // directly into the delay line, bypassing feedback. This naturally
+        // overwrites stale data as the write head advances. The IIR is warmed
+        // up from the excitation signal (not from stale delay-line reads) so
+        // the filter state is correct when sustain begins.
+        noise_seed_ = noise_seed_ * 1664525u + 1013904223u;
+        float noise = static_cast<float>(static_cast<int32_t>(noise_seed_))
+                      * (1.0f / 2147483648.0f);
+        float sine  = sinf(excite_phase_);
+        float excite = ((1.0f - body_param_) * noise + body_param_ * sine)
+                       * excite_scale_;
+        if (excite >  32767.0f) excite =  32767.0f;
+        if (excite < -32767.0f) excite = -32767.0f;
+
+        iir_state_ = iir_alpha_ * excite + (1.0f - iir_alpha_) * iir_state_;
+        new_sample = excite;
+        excite_phase_ += excite_phase_inc_;
+        excite_remaining_--;
+      } else {
+        // Sustain phase: normal KS feedback (1st-order IIR + loop gain)
+        float filtered = iir_alpha_ * raw + (1.0f - iir_alpha_) * iir_state_;
+        iir_state_     = filtered;
+        new_sample     = filtered * loop_gain;
+      }
 
       // Write back: delay line values live in q15 float units (±32767).
       // Keep write_idx_ masked (0–4095) so float(write_idx_) stays within
@@ -202,61 +221,10 @@ public:
   }
 
 private:
-  // -----------------------------------------------------------------------
-  // Excitation: fill the delay line with a noise/sine blend controlled by
-  // body_param_. body=0 gives pure white noise (bright, percussive attack).
-  // body=1 gives a pure sine at the string fundamental (clean, smooth attack).
-  // Middle values crossfade linearly, giving an audible sweep from noisy to
-  // pure across the full 0–100 display range.
-  //
-  // This is distinct from Brightness, which shapes the ongoing feedback IIR
-  // (affects sustain/timbre). Body affects the attack transient only.
-  //
-  // sinf is called once per note-on (not per-block), so even for the lowest
-  // pitch (n ≈ 2205) the cost is ~110 µs — well within the 2.9 ms budget.
-  // -----------------------------------------------------------------------
-  void exciteString(float velocity) {
-    // Number of samples to fill = one full period (≈ delay_length)
-    int n = static_cast<int>(smooth_delay_);
-    if (n < 2)                        n = 2;
-    if (n >= static_cast<int>(BUFFER_SIZE)) n = BUFFER_SIZE - 1;
-
-    // Wipe the delay line and IIR state for a clean, click-free attack
-    memset(delay_line_, 0, BUFFER_SIZE * sizeof(float));
-    iir_state_ = 0.0f;
-
-    float excite_scale = velocity * 32767.0f;
-
-    // Sine step: one full cycle over n samples (= one string period)
-    static constexpr float KS_TWO_PI = 6.28318530718f;
-    float body_omega = KS_TWO_PI / static_cast<float>(n);
-
-    for (int i = 0; i < n; i++) {
-      // LCG white noise: good spectral flatness, zero allocation overhead
-      noise_seed_ = noise_seed_ * 1664525u + 1013904223u;
-      float noise = static_cast<float>(static_cast<int32_t>(noise_seed_))
-                    * (1.0f / 2147483648.0f);  // [-1.0, 1.0]
-
-      // Sine at fundamental — one full period across the delay line
-      float sine = sinf(body_omega * static_cast<float>(i));
-
-      // body=0 → pure noise (bright/percussive), body=1 → pure sine (clean/smooth)
-      float sample = ((1.0f - body_param_) * noise + body_param_ * sine) * excite_scale;
-
-      // Clamp to q15 float range
-      if (sample >  32767.0f) sample =  32767.0f;
-      if (sample < -32767.0f) sample = -32767.0f;
-
-      // Fill positions write_idx_ - n … write_idx_ - 1 (the "past" of the
-      // string). Unsigned subtraction + BUFFER_MASK handles all wraparound.
-      uint32_t idx = (write_idx_ - static_cast<uint32_t>(n - i)) & BUFFER_MASK;
-      delay_line_[idx] = sample;
-    }
-  }
+  static constexpr float KS_TWO_PI = 6.28318530718f;
 
   // --- Delay line ---------------------------------------------------------
   float*   delay_line_ = nullptr;
-  bool     use_extmem_ = false;
   uint32_t write_idx_  = 0;
 
   // --- Pitch smoothing ----------------------------------------------------
@@ -275,6 +243,12 @@ private:
   // --- Trigger (volatile: written in main loop, read in audio interrupt) --
   volatile bool  trigger_pending_  = false;
   volatile float trigger_velocity_ = 1.0f;
+
+  // --- Progressive excitation state ---------------------------------------
+  int      excite_remaining_ = 0;    // samples left to generate for current pluck
+  float    excite_phase_     = 0.0f; // sine phase accumulator
+  float    excite_phase_inc_ = 0.0f; // sine phase step per sample
+  float    excite_scale_     = 0.0f; // velocity * 32767
 
   // --- Noise generation ---------------------------------------------------
   uint32_t noise_seed_ = 0xDEADBEEF;
