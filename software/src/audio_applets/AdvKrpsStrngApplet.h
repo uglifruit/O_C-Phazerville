@@ -260,7 +260,7 @@ private:
   int8_t  decay      = 50;
   int8_t  brightness = 70;
   int8_t  body       = 30;
-  int8_t  mix        = 0;             // 0 = fully transparent by default; turn up to add synthesis
+  int8_t  mix        = 100;             // 0 = fully transparent by default; turn up to add synthesis
 
   // CV / trigger routing
   CVInputMap     pitch_cv;
