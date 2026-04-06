@@ -19,6 +19,7 @@
 #include "audio_applets/SamverbApplet.h"
 #include "audio_applets/PhaserApplet.h"
 #include "audio_applets/ThreeBandz.h"
+#include "audio_applets/FMDrumApplet.h"
 
 const size_t NUM_SLOTS = 5;
 
@@ -31,6 +32,7 @@ DMAMEM std::tuple<
   HandSawApplet,
   UpsampledApplet<MONO>,
   OscApplet,
+  FMDrumApplet,
   WavPlayerApplet<MONO>>
     mono_input_pool[2];
 DMAMEM std::tuple<
