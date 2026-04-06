@@ -8,8 +8,8 @@ extern "C" uint8_t external_psram_size;
 //
 // Continuously records audio into a 1-second circular buffer. When HOLD is
 // gated, the read pointer freezes on a clock-sized slice and loops it in
-// Forward, Reverse, or Ping-Pong mode. Wet/dry mix blends the frozen slice
-// with the live input.
+// Forward, Reverse, Ping-Pong, or Ratchet (MOD) mode. Wet/dry mix blends
+// the frozen slice with the live input.
 //
 // I/O (within Quadrants audio chain):
 //   Input  → glitch DSP → wet channel  ┐
@@ -19,7 +19,10 @@ extern "C" uint8_t external_psram_size;
 //   CLOCK_SRC  — clock source for beat tracking (DigitalInputMap)
 //   DIV        — slice length as clock division (1/2 … 1/64)
 //   HOLD_SRC   — gate input that activates stutter (DigitalInputMap)
-//   MODE       — FWD / REV / PNG (ping-pong)
+//   MODE       — FWD / REV / PNG / MOD (ping-pong / ratchet)
+//   MODE_CV    — CV modulates effective mode index
+//   RATCHET    — ratchet subdivisions 1–6 (visible only in MOD mode)
+//   RATCHET_CV — CV modulates ratchet count
 //   MIX        — wet/dry balance 0–100%, CV-modulatable
 //
 // AuxButton latches manual hold without a patched gate.
@@ -55,6 +58,14 @@ public:
         // Gate state: hardware gate OR latched manual hold.
         bool held = hold_input.Gate() || manual_hold_;
 
+        // CV-modulated mode and ratchet count.
+        int eff_mode = constrain(
+            (int)mode + (int)roundf(mode_cv.InF() * (NUM_MODES - 1)),
+            0, NUM_MODES - 1);
+        uint8_t eff_ratchet = (uint8_t)constrain(
+            (int)ratchet + (int)roundf(ratchet_cv.InF() * 5.0f),
+            1, 6);
+
         // Equal-power wet/dry gains (computed once, set on all channels).
         float dry_gain, wet_gain;
         EqualPowerFade(dry_gain, wet_gain,
@@ -63,7 +74,8 @@ public:
         for (int ch = 0; ch < Channels; ch++) {
             channels[ch].glitch_stream.setHold(held);
             channels[ch].glitch_stream.setSliceSamples(slice_samples);
-            channels[ch].glitch_stream.setMode(mode);
+            channels[ch].glitch_stream.setMode(eff_mode);
+            channels[ch].glitch_stream.setRatchet(eff_ratchet);
             channels[ch].wet_dry_mixer.gain(GlitchChannel::DRY_CH, dry_gain);
             channels[ch].wet_dry_mixer.gain(GlitchChannel::WET_CH, wet_gain);
         }
@@ -79,7 +91,7 @@ public:
         gfxPos(1, 15);
         gfxStartCursor();
         gfxPrint(clock_source);
-        gfxEndCursor(cursor == CLOCK_SRC);
+        gfxEndCursor(cursor == CLOCK_SRC, false, clock_source.InputName());
 
         gfxStartCursor();
         gfxPrint(DIV_NAMES[div]);
@@ -90,23 +102,49 @@ public:
         if (manual_hold_) gfxInvert(1, 25, 24, 8); // indicate latched hold
         gfxStartCursor();
         gfxPrint(hold_input);
-        gfxEndCursor(cursor == HOLD_SRC, true); // spicy: AuxButton triggers hold
+        gfxEndCursor(cursor == HOLD_SRC, true, hold_input.InputName()); // spicy: AuxButton triggers hold
 
-        // ── Line 3 (y=35): Playback mode ─────────────────────────────────
+        // ── Line 3 (y=35): Playback mode + CV ────────────────────────────
         gfxPrint(1, 35, "Mod:");
         gfxStartCursor();
         gfxPrint(MODE_NAMES[mode]);
         gfxEndCursor(cursor == MODE);
 
-        // ── Line 4 (y=45): Mix + CV modulation ───────────────────────────
-        gfxPrint(1, 45, "Mix:");
         gfxStartCursor();
-        graphics.printf("%3d%%", mix);
-        gfxEndCursor(cursor == MIX);
+        gfxPrint(mode_cv);
+        gfxEndCursor(cursor == MODE_CV, false, mode_cv.InputName());
 
-        gfxStartCursor();
-        gfxPrint(mix_cv);
-        gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+        if (mode == MODE_RATCHET) {
+            // ── Line 4 (y=45): Ratchet count + CV (MOD mode only) ────────
+            gfxPrint(1, 45, "Rch:");
+            gfxStartCursor();
+            gfxPrint(ratchet);
+            gfxEndCursor(cursor == RATCHET);
+
+            gfxStartCursor();
+            gfxPrint(ratchet_cv);
+            gfxEndCursor(cursor == RATCHET_CV, false, ratchet_cv.InputName());
+
+            // ── Line 5 (y=55): Mix + CV ───────────────────────────────────
+            gfxPrint(1, 55, "Mix:");
+            gfxStartCursor();
+            graphics.printf("%3d%%", mix);
+            gfxEndCursor(cursor == MIX);
+
+            gfxStartCursor();
+            gfxPrint(mix_cv);
+            gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+        } else {
+            // ── Line 4 (y=45): Mix + CV ───────────────────────────────────
+            gfxPrint(1, 45, "Mix:");
+            gfxStartCursor();
+            graphics.printf("%3d%%", mix);
+            gfxEndCursor(cursor == MIX);
+
+            gfxStartCursor();
+            gfxPrint(mix_cv);
+            gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+        }
 
         gfxDisplayInputMapEditor();
     }
@@ -120,9 +158,11 @@ public:
     void OnButtonPress() override {
         if (CheckEditInputMapPress(
                 cursor,
-                IndexedInput(CLOCK_SRC, clock_source),
-                IndexedInput(HOLD_SRC,  hold_input),
-                IndexedInput(MIX_CV,    mix_cv)
+                IndexedInput(CLOCK_SRC,  clock_source),
+                IndexedInput(HOLD_SRC,   hold_input),
+                IndexedInput(MODE_CV,    mode_cv),
+                IndexedInput(RATCHET_CV, ratchet_cv),
+                IndexedInput(MIX_CV,     mix_cv)
             ))
             return;
         CursorToggle();
@@ -130,31 +170,46 @@ public:
 
     void OnEncoderMove(int direction) override {
         if (!EditMode()) {
-            MoveCursor(cursor, direction, CURSOR_LENGTH - 1);
+            int next = cursor + direction;
+            // Skip RATCHET/RATCHET_CV positions when not in MOD mode.
+            if (mode != MODE_RATCHET) {
+                if (next == RATCHET || next == RATCHET_CV) next += direction;
+            }
+            cursor = (Cursor)constrain(next, 0, CURSOR_LENGTH - 1);
             return;
         }
         if (EditSelectedInputMap(direction)) return;
 
         switch (cursor) {
-            case CLOCK_SRC: clock_source.ChangeSource(direction); break;
-            case DIV:       div = constrain(div + direction, 0, NUM_DIVS - 1); break;
-            case HOLD_SRC:  hold_input.ChangeSource(direction); break;
-            case MODE:      mode = constrain(mode + direction, 0, 2); break;
-            case MIX:       mix  = constrain(mix  + direction, 0, 100); break;
-            case MIX_CV:    mix_cv.ChangeSource(direction); break;
+            case CLOCK_SRC:  clock_source.ChangeSource(direction); break;
+            case DIV:        div = constrain(div + direction, 0, NUM_DIVS - 1); break;
+            case HOLD_SRC:   hold_input.ChangeSource(direction); break;
+            case MODE:
+                mode = constrain(mode + direction, 0, NUM_MODES - 1);
+                // If leaving MOD mode while cursor is on a ratchet row, reset it.
+                if (mode != MODE_RATCHET && (cursor == RATCHET || cursor == RATCHET_CV))
+                    cursor = MODE;
+                break;
+            case MODE_CV:    mode_cv.ChangeSource(direction); break;
+            case RATCHET:    ratchet = constrain(ratchet + direction, 1, 6); break;
+            case RATCHET_CV: ratchet_cv.ChangeSource(direction); break;
+            case MIX:        mix = constrain(mix + direction, 0, 100); break;
+            case MIX_CV:     mix_cv.ChangeSource(direction); break;
             default: break;
         }
     }
 
-#define GLITCH_PARAMS  pack<3>(div), pack<2>(mode), mix
+#define GLITCH_PARAMS  pack<3>(div), pack<2>(mode), pack<3>(ratchet), mix
     void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(GLITCH_PARAMS);
         data[1] = PackPackables(clock_source, hold_input, mix_cv);
+        data[2] = PackPackables(mode_cv, ratchet_cv);
     }
 
     void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], GLITCH_PARAMS);
         UnpackPackables(data[1], clock_source, hold_input, mix_cv);
+        UnpackPackables(data[2], mode_cv, ratchet_cv);
     }
 #undef GLITCH_PARAMS
 
@@ -165,33 +220,42 @@ protected:
     void SetHelp() override {}
 
 private:
-    static const uint8_t NUM_DIVS = 6;
+    static const uint8_t NUM_DIVS  = 6;
+    static const uint8_t NUM_MODES = 4;
+    static const uint8_t MODE_RATCHET = AudioEffectGlitch::MODE_RATCHET;
+
     static constexpr const char* DIV_NAMES[] = {
         "1/2", "1/4", "1/8", "1/16", "1/32", "1/64"
     };
     static constexpr float DIV_BEATS[] = {
         2.0f, 1.0f, 0.5f, 0.25f, 0.125f, 0.0625f
     };
-    static constexpr const char* MODE_NAMES[] = { "FWD", "REV", "PNG" };
+    static constexpr const char* MODE_NAMES[] = { "FWD", "REV", "PNG", "RAT" };
 
     enum Cursor : int8_t {
-        CLOCK_SRC,
+        CLOCK_SRC = 0,
         DIV,
         HOLD_SRC,
         MODE,
+        MODE_CV,
+        RATCHET,
+        RATCHET_CV,
         MIX,
         MIX_CV,
         CURSOR_LENGTH,
     };
 
-    int8_t cursor = DIV;
+    Cursor cursor = DIV;
 
     // Parameters
     DigitalInputMap clock_source;
-    uint8_t  div  = 3;   // default 1/16
+    uint8_t  div     = 3;   // default 1/16
     DigitalInputMap hold_input;
-    uint8_t  mode = 0;   // 0=FWD, 1=REV, 2=PING
-    int8_t   mix  = 100; // 0–100% wet
+    uint8_t  mode    = 0;   // 0=FWD, 1=REV, 2=PING, 3=MOD
+    CVInputMap mode_cv;
+    uint8_t  ratchet = 2;   // 1–6 subdivisions, used in MOD mode
+    CVInputMap ratchet_cv;
+    int8_t   mix     = 100; // 0–100% wet
     CVInputMap mix_cv;
 
     bool manual_hold_ = false;

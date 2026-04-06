@@ -29,9 +29,10 @@ public:
     static const size_t GLITCH_BUFFER_SAMPLES = 48000; // 1 sec at 48 kHz
     static const size_t FADE_SAMPLES = 64;             // ~1.3 ms micro-fade
 
-    static const uint8_t MODE_FWD  = 0;
-    static const uint8_t MODE_REV  = 1;
-    static const uint8_t MODE_PING = 2;
+    static const uint8_t MODE_FWD    = 0;
+    static const uint8_t MODE_REV    = 1;
+    static const uint8_t MODE_PING   = 2;
+    static const uint8_t MODE_RATCHET = 3;
 
     AudioEffectGlitch(size_t buf_len = GLITCH_BUFFER_SAMPLES)
         : AudioStream(1, input_queue_array), g_buffer(buf_len) {}
@@ -51,6 +52,7 @@ public:
     }
 
     void setMode(uint8_t m) { mode_ = m; }
+    void setRatchet(uint8_t r) { ratchet_ = r; }
 
     void update() override {
         audio_block_t* in  = receiveReadOnly(0);
@@ -62,10 +64,16 @@ public:
 
         // Snapshot volatile params once per block to ensure consistency
         // within the sample loop.
-        const bool   cur_hold    = hold_;
-        const size_t cur_slice   = slice_samples_;
-        const uint8_t cur_mode   = mode_;
-        const size_t  buf_size   = g_buffer.NumSamples;
+        const bool    cur_hold    = hold_;
+        const size_t  cur_slice   = slice_samples_;
+        const uint8_t cur_mode    = mode_;
+        const uint8_t cur_ratchet = ratchet_;
+        const size_t  buf_size    = g_buffer.NumSamples;
+
+        // In RATCHET mode the effective loop is the first 1/ratchet of the slice.
+        const size_t loop_len = (cur_mode == MODE_RATCHET && cur_ratchet > 1)
+            ? std::max(cur_slice / (size_t)cur_ratchet, (size_t)AUDIO_BLOCK_SAMPLES)
+            : cur_slice;
 
         // Detect rising edge of hold: capture the last cur_slice samples as
         // the frozen slice. Do this BEFORE writing so write_ix still points
@@ -92,7 +100,7 @@ public:
         } else {
             // STUTTER: loop the frozen slice with optional micro-fades.
             // fade_len = 0 when slice is too short to hold non-overlapping fades.
-            const size_t fade_len   = (cur_slice >= FADE_SAMPLES * 2) ? FADE_SAMPLES : 0;
+            const size_t fade_len   = (loop_len >= FADE_SAMPLES * 2) ? FADE_SAMPLES : 0;
             const float  fade_scale = (fade_len > 0) ? (1.0f / (float)fade_len) : 0.0f;
 
             // Hoist mode check outside the per-sample loop.
@@ -123,16 +131,16 @@ public:
                 if (fade_len > 0) {
                     if (p < fade_len) {
                         fade = (float)p * fade_scale;
-                    } else if (p >= cur_slice - fade_len) {
-                        fade = (float)(cur_slice - p) * fade_scale;
+                    } else if (p >= loop_len - fade_len) {
+                        fade = (float)(loop_len - p) * fade_scale;
                     }
                 }
 
                 out->data[i] = Clip16((float)g_buffer.ReadAt(read_ptr) * fade);
 
-                // Advance position within slice; wrap and handle ping-pong toggle.
+                // Advance position within loop; wrap and handle ping-pong toggle.
                 pos_++;
-                if (pos_ >= cur_slice) {
+                if (pos_ >= loop_len) {
                     pos_ = 0;
                     if (cur_mode == MODE_PING) {
                         ping_fwd_ = !ping_fwd_;
@@ -152,9 +160,10 @@ private:
     audio_block_t* input_queue_array[1];
 
     // Written from Controller() (ISR), read from update() (audio interrupt).
-    volatile bool   hold_          = false;
-    volatile size_t slice_samples_ = GLITCH_BUFFER_SAMPLES / 8; // 125ms default
-    volatile uint8_t mode_         = MODE_FWD;
+    volatile bool    hold_          = false;
+    volatile size_t  slice_samples_ = GLITCH_BUFFER_SAMPLES / 8; // 125ms default
+    volatile uint8_t mode_          = MODE_FWD;
+    volatile uint8_t ratchet_       = 2; // 1–6, used by MODE_RATCHET
 
     // Internal state accessed only from update() — not volatile.
     bool   was_held_    = false;
