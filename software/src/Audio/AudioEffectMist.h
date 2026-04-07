@@ -34,6 +34,8 @@ public:
     static const size_t MIST_BUFFER_SAMPLES = AUDIO_SAMPLE_RATE; // 1 sec at sample rate
     static const int    MAX_GRAINS = 12;
 
+    enum GrainShape : uint8_t { SHAPE_HANN = 0, SHAPE_TRIANGLE, SHAPE_RAMP_UP, SHAPE_RAMP_DOWN };
+
     AudioEffectMist(size_t buf_len = MIST_BUFFER_SAMPLES)
         : AudioStream(1, input_queue_array), g_buffer(buf_len) {}
 
@@ -50,6 +52,7 @@ public:
     void setPitch(float r)           { pitch_   = r; }
     void setPitchSpread(float semis) { psprd_   = semis; }
     void setFreeze(bool f)           { freeze_  = f; }
+    void setShape(GrainShape s)      { shape_   = s; }
 
     uint8_t ActiveGrainCount() const {
         uint8_t n = 0;
@@ -69,8 +72,9 @@ public:
         const float   cur_spray   = spray_;
         const float   cur_pitch   = pitch_;
         const float   cur_psprd   = psprd_;
-        const bool    cur_freeze  = freeze_;
-        const size_t  buf_size    = g_buffer.NumSamples;
+        const bool       cur_freeze  = freeze_;
+        const GrainShape cur_shape   = shape_;
+        const size_t     buf_size    = g_buffer.NumSamples;
 
         // Write incoming audio unless frozen.
         if (in && !cur_freeze) g_buffer.Write(in);
@@ -98,7 +102,7 @@ public:
             spawn_phase_ += cur_density / AUDIO_SAMPLE_RATE_EXACT;
             if (spawn_phase_ >= 1.0f) {
                 spawn_phase_ -= 1.0f;
-                spawnGrain(cur_pos, cur_size, cur_spray, cur_pitch, cur_psprd, buf_size);
+                spawnGrain(cur_pos, cur_size, cur_spray, cur_pitch, cur_psprd, cur_shape, buf_size);
             }
 
             // ── Sum active grains ──────────────────────────────────────────
@@ -106,10 +110,20 @@ public:
             for (auto& g : grains) {
                 if (!g.active) continue;
 
-                // Hann window: sin²(π × phase / grain_len)
                 float t = (float)g.phase / (float)(g.grain_len - 1);
-                float w = sinf(3.14159265358979f * t);
-                w *= w;
+                float w;
+                switch (g.shape) {
+                    case SHAPE_TRIANGLE:
+                        w = (t < 0.5f) ? (2.0f * t) : (2.0f - 2.0f * t); break;
+                    case SHAPE_RAMP_UP:
+                        w = t; break;
+                    case SHAPE_RAMP_DOWN:
+                        w = 1.0f - t; break;
+                    default: { // SHAPE_HANN: sin²(π × t)
+                        float s = sinf(3.14159265358979f * t);
+                        w = s * s;
+                    } break;
+                }
 
                 // Hermite-interpolated read at g.read_ptr.
                 size_t idx  = (size_t)g.read_ptr;
@@ -147,11 +161,12 @@ private:
     static constexpr float GRAIN_SCALE = 0.25f;
 
     struct Grain {
-        bool   active    = false;
-        float  read_ptr  = 0.0f;  // fractional buffer index
-        float  pitch     = 1.0f;  // playback ratio
-        size_t grain_len = 0;     // duration in samples
-        size_t phase     = 0;     // position within grain
+        bool       active    = false;
+        float      read_ptr  = 0.0f;  // fractional buffer index
+        float      pitch     = 1.0f;  // playback ratio
+        size_t     grain_len = 0;     // duration in samples
+        size_t     phase     = 0;     // position within grain
+        GrainShape shape     = SHAPE_HANN;
     } grains[MAX_GRAINS];
 
     MistCircBuffer<int16_t> g_buffer;
@@ -167,10 +182,11 @@ private:
     volatile float spray_   = 0.0f;   // fraction of buffer
     volatile float pitch_   = 1.0f;   // ratio
     volatile float psprd_   = 0.0f;   // random pitch spread per grain (semitones)
-    volatile bool  freeze_  = false;
+    volatile bool       freeze_  = false;
+    volatile GrainShape shape_   = SHAPE_HANN;
 
     void spawnGrain(float cur_pos, float cur_size, float cur_spray,
-                    float cur_pitch, float cur_psprd, size_t buf_size) {
+                    float cur_pitch, float cur_psprd, GrainShape cur_shape, size_t buf_size) {
         // Find an inactive slot.
         Grain* g = nullptr;
         for (auto& gr : grains) {
@@ -204,6 +220,7 @@ private:
         g->pitch     = grain_pitch;
         g->grain_len = glen;
         g->phase     = 0;
+        g->shape     = cur_shape;
         g->active    = true;
     }
 };

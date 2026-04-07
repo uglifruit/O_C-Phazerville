@@ -66,6 +66,7 @@ public:
             channels[ch].grain_stream.setPitch(eff_pitch);
             channels[ch].grain_stream.setPitchSpread(eff_psprd_semis);
             channels[ch].grain_stream.setFreeze(frozen);
+            channels[ch].grain_stream.setShape((AudioEffectMist::GrainShape)shape);
             channels[ch].wet_dry_mixer.gain(MistChannel::DRY_CH, dry_gain);
             channels[ch].wet_dry_mixer.gain(MistChannel::WET_CH, wet_gain);
         }
@@ -123,10 +124,14 @@ public:
             gfxPrint(1, 45, "Mix:");
             gfxStartCursor(); graphics.printf("%3d%%", mix); gfxEndCursor(cursor == MIX);
             gfxStartCursor(); gfxPrint(mix_cv); gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+
+            static const char* SHAPE_NAMES[] = { "Hann", "Tri ", "R-Up", "R-Dn" };
+            gfxPrint(1, 55, "Shp:");
+            gfxStartCursor(); gfxPrint(SHAPE_NAMES[shape]); gfxEndCursor(cursor == SHAPE);
         }
 
-        // Page indicator "1/2" or "2/2" at bottom-right (3 chars × 6px = 18px, fits at x=46)
-        gfxPrint(46, 56, pg2 ? "2/2" : "1/2");
+        // Page indicator — single char at bottom-right
+        gfxPrint(60, 56, pg2 ? "2" : "1");
 
         gfxDisplayInputMapEditor();
     }
@@ -176,11 +181,12 @@ public:
             case FREEZE:     freeze_input.ChangeSource(direction);               break;
             case MIX:        mix     = constrain(mix     + direction, 0, 100);  break;
             case MIX_CV:     mix_cv.ChangeSource(direction);                     break;
+            case SHAPE:      shape   = constrain(shape   + direction, 0, 3);    break;
             default: break;
         }
     }
 
-#define MIST_PARAMS  pos, density, size, spray, pitch, psprd, mix
+#define MIST_PARAMS  pos, density, size, spray, pitch, psprd, mix, shape
     void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(MIST_PARAMS);
         data[1] = PackPackables(pos_cv, density_cv, size_cv);
@@ -219,6 +225,7 @@ private:
         FREEZE,
         MIX,
         MIX_CV,
+        SHAPE,
         CURSOR_LENGTH,
     };
 
@@ -240,6 +247,7 @@ private:
     DigitalInputMap freeze_input;
     int8_t  mix     = 80;  // 0–100% wet
     CVInputMap mix_cv;
+    int8_t  shape   = 0;   // 0=Hann, 1=Triangle, 2=Ramp-Up, 3=Ramp-Down
 
     bool manual_freeze_ = false;
 
