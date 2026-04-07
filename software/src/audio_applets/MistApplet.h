@@ -15,37 +15,27 @@ extern "C" uint8_t external_psram_size;
 //   Input → [AudioEffectMist] → wet  ─┐
 //   Input →                    → dry    ─┴→ AudioMixer<2> → Output
 //
-// Parameters:
-//   POS     — playback position in buffer (0=live, 100=oldest), CV-able
-//   DENSITY — grain spawn rate 1–50 Hz, CV-able (bipolar)
-//   SIZE    — grain duration 10–500 ms, CV-able (bipolar)
-//   SPRAY   — position scatter 0–100%, CV-able (bipolar)
-//   PITCH   — playback speed ±12 semitones, CV-able (bipolar)
-//   PSPRD   — per-grain pitch spread 0–100% (0=none, 100=±1oct), CV-able (bipolar)
-//   FREEZE  — gate input stops write pointer (AuxButton = manual latch)
-//   MIX     — wet/dry balance 0–100%, CV-able (bipolar)
-//
-// FLASHMEM annotations on all non-DSP methods move their compiled code from
-// ITCM (RAM1) to execute-in-place Flash, reducing the RAM1 code footprint.
-// AudioEffectMist::update() and spawnGrain() are intentionally left in ITCM.
+// Parameters (two pages, 4 per page):
+//   Page 1: POS, DENSITY, SIZE, SPRAY
+//   Page 2: PITCH, PSPRD, FREEZE, MIX
 //
 template <AudioChannels Channels>
 class MistApplet : public HemisphereAudioApplet {
 public:
     const char* applet_name() override { return "Mist"; }
 
-    FLASHMEM void Start() override {
+    void Start() override {
         for (int ch = 0; ch < Channels; ch++) {
             channels[ch].Start(this, ch, input_stream, output_stream);
         }
     }
 
-    FLASHMEM void Unload() override {
+    void Unload() override {
         for (auto& ch : channels) ch.Stop();
         AllowRestart();
     }
 
-    FLASHMEM void Controller() override {
+    void Controller() override {
         // CV-modulated effective parameter values.
         float eff_pos     = constrain(0.01f * pos     + pos_cv.InF(),             0.0f, 1.0f);
         float eff_density = constrain((float)density  + density_cv.InF() * 49.0f, 1.0f, 50.0f);
@@ -57,8 +47,6 @@ public:
         float eff_pitch   = SemitonesToRatio(eff_semis);
 
         // Pitch spread: 0–100% → 0–12 semitones via quadratic curve.
-        // Squaring gives log-like feel: small values cover fine spreads (<0.5st),
-        // large values reach up to ±1 octave.
         float eff_psprd_raw   = constrain(0.01f * psprd + psprd_cv.InF(), 0.0f, 1.0f);
         float eff_psprd_semis = 12.0f * eff_psprd_raw * eff_psprd_raw;
 
@@ -83,7 +71,7 @@ public:
         }
     }
 
-    FLASHMEM void View() override {
+    void View() override {
         if (!channels[0].grain_stream.IsReady()) {
             gfxPrint(1, 15, "No PSRAM");
             return;
@@ -95,118 +83,61 @@ public:
             if (i < active) gfxPixel(1 + i, 7);
         }
 
-        // ── Scrolling parameter rows ──────────────────────────────────────
-        // 8 param rows, 6 visible at a time (y=15..55, 8px per row).
-        static const int FIRST_Y = 15;
-        static const int ROW_H   = 8;
-        static const int VISIBLE = 6;
+        // ── Two pages, 4 params each (y=15,25,35,45; 10px per row) ────────
+        // Page 1 (cursor < PITCH): Pos, Den, Sz, Spr
+        // Page 2 (cursor >= PITCH): Pt, PSp, Frz, Mix
+        const bool pg2 = (cursor >= PITCH);
 
-        // Keep the cursor's row inside the scroll window.
-        int cur_row = CursorToRow(cursor);
-        if (cur_row < scroll_top_)             scroll_top_ = cur_row;
-        if (cur_row >= scroll_top_ + VISIBLE)  scroll_top_ = cur_row - VISIBLE + 1;
+        if (!pg2) {
+            gfxPrint(1, 15, "Pos:");
+            gfxStartCursor(); graphics.printf("%3d%%", pos); gfxEndCursor(cursor == POS);
+            gfxStartCursor(); gfxPrint(pos_cv); gfxEndCursor(cursor == POS_CV, false, pos_cv.InputName());
 
-        auto y_of = [&](int row) { return FIRST_Y + (row - scroll_top_) * ROW_H; };
-        auto vis  = [&](int row) { return row >= scroll_top_ && row < scroll_top_ + VISIBLE; };
+            gfxPrint(1, 25, "Den:");
+            gfxStartCursor(); graphics.printf("%2d", density); gfxEndCursor(cursor == DENSITY);
+            gfxStartCursor(); gfxPrint(density_cv); gfxEndCursor(cursor == DENSITY_CV, false, density_cv.InputName());
 
-        // Row 0: Position
-        if (vis(0)) {
-            gfxPrint(1, y_of(0), "Pos:");
-            gfxStartCursor();
-            graphics.printf("%3d%%", pos);
-            gfxEndCursor(cursor == POS);
-            gfxStartCursor();
-            gfxPrint(pos_cv);
-            gfxEndCursor(cursor == POS_CV, false, pos_cv.InputName());
-        }
+            gfxPrint(1, 35, "Sz:");
+            gfxStartCursor(); graphics.printf("%3dms", size * 10); gfxEndCursor(cursor == SIZE);
+            gfxStartCursor(); gfxPrint(size_cv); gfxEndCursor(cursor == SIZE_CV, false, size_cv.InputName());
 
-        // Row 1: Density
-        if (vis(1)) {
-            gfxPrint(1, y_of(1), "Den:");
-            gfxStartCursor();
-            graphics.printf("%2d", density);
-            gfxEndCursor(cursor == DENSITY);
-            gfxStartCursor();
-            gfxPrint(density_cv);
-            gfxEndCursor(cursor == DENSITY_CV, false, density_cv.InputName());
-        }
-
-        // Row 2: Size
-        if (vis(2)) {
-            gfxPrint(1, y_of(2), "Sz:");
-            gfxStartCursor();
-            graphics.printf("%3dms", size * 10);
-            gfxEndCursor(cursor == SIZE);
-            gfxStartCursor();
-            gfxPrint(size_cv);
-            gfxEndCursor(cursor == SIZE_CV, false, size_cv.InputName());
-        }
-
-        // Row 3: Spray
-        if (vis(3)) {
-            gfxPrint(1, y_of(3), "Spr:");
-            gfxStartCursor();
-            graphics.printf("%3d%%", spray);
-            gfxEndCursor(cursor == SPRAY);
-            gfxStartCursor();
-            gfxPrint(spray_cv);
-            gfxEndCursor(cursor == SPRAY_CV, false, spray_cv.InputName());
-        }
-
-        // Row 4: Pitch
-        if (vis(4)) {
-            gfxPrint(1, y_of(4), "Pt:");
+            gfxPrint(1, 45, "Spr:");
+            gfxStartCursor(); graphics.printf("%3d%%", spray); gfxEndCursor(cursor == SPRAY);
+            gfxStartCursor(); gfxPrint(spray_cv); gfxEndCursor(cursor == SPRAY_CV, false, spray_cv.InputName());
+        } else {
+            gfxPrint(1, 15, "Pt:");
             gfxStartCursor();
             if (pitch >= 0) graphics.printf("+%2d", pitch);
             else            graphics.printf("%3d", pitch);
             gfxEndCursor(cursor == PITCH);
-            gfxStartCursor();
-            gfxPrint(pitch_cv);
-            gfxEndCursor(cursor == PITCH_CV, false, pitch_cv.InputName());
+            gfxStartCursor(); gfxPrint(pitch_cv); gfxEndCursor(cursor == PITCH_CV, false, pitch_cv.InputName());
+
+            gfxPrint(1, 25, "PSp:");
+            gfxStartCursor(); graphics.printf("%3d%%", psprd); gfxEndCursor(cursor == PSPRD);
+            gfxStartCursor(); gfxPrint(psprd_cv); gfxEndCursor(cursor == PSPRD_CV, false, psprd_cv.InputName());
+
+            gfxPrint(1, 35, "Frz:");
+            if (manual_freeze_) gfxInvert(1, 35, 24, 8);
+            gfxStartCursor(); gfxPrint(freeze_input); gfxEndCursor(cursor == FREEZE, true, freeze_input.InputName());
+
+            gfxPrint(1, 45, "Mix:");
+            gfxStartCursor(); graphics.printf("%3d%%", mix); gfxEndCursor(cursor == MIX);
+            gfxStartCursor(); gfxPrint(mix_cv); gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
         }
 
-        // Row 5: Pitch Spread
-        if (vis(5)) {
-            gfxPrint(1, y_of(5), "PSp:");
-            gfxStartCursor();
-            graphics.printf("%3d%%", psprd);
-            gfxEndCursor(cursor == PSPRD);
-            gfxStartCursor();
-            gfxPrint(psprd_cv);
-            gfxEndCursor(cursor == PSPRD_CV, false, psprd_cv.InputName());
-        }
-
-        // Row 6: Freeze
-        if (vis(6)) {
-            int y = y_of(6);
-            gfxPrint(1, y, "Frz:");
-            if (manual_freeze_) gfxInvert(1, y, 24, 8);
-            gfxStartCursor();
-            gfxPrint(freeze_input);
-            gfxEndCursor(cursor == FREEZE, true, freeze_input.InputName());
-        }
-
-        // Row 7: Mix
-        if (vis(7)) {
-            gfxPrint(1, y_of(7), "Mix:");
-            gfxStartCursor();
-            graphics.printf("%3d%%", mix);
-            gfxEndCursor(cursor == MIX);
-            gfxStartCursor();
-            gfxPrint(mix_cv);
-            gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
-        }
+        // Page indicator "1/2" or "2/2" at bottom-right (3 chars × 6px = 18px, fits at x=46)
+        gfxPrint(46, 56, pg2 ? "2/2" : "1/2");
 
         gfxDisplayInputMapEditor();
     }
 
     // AuxButton latches manual freeze for performance use without a patch cable.
-    FLASHMEM void AuxButton() override {
+    void AuxButton() override {
         manual_freeze_ ^= 1;
         CancelEdit();
     }
 
-    FLASHMEM void OnButtonPress() override {
+    void OnButtonPress() override {
         if (CheckEditInputMapPress(
                 cursor,
                 IndexedInput(POS_CV,     pos_cv),
@@ -222,7 +153,7 @@ public:
         CursorToggle();
     }
 
-    FLASHMEM void OnEncoderMove(int direction) override {
+    void OnEncoderMove(int direction) override {
         if (!EditMode()) {
             MoveCursor(cursor, direction, CURSOR_LENGTH - 1);
             return;
@@ -250,14 +181,14 @@ public:
     }
 
 #define MIST_PARAMS  pos, density, size, spray, pitch, psprd, mix
-    FLASHMEM void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
+    void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(MIST_PARAMS);
         data[1] = PackPackables(pos_cv, density_cv, size_cv);
         data[2] = PackPackables(spray_cv, pitch_cv, psprd_cv, mix_cv);
         data[3] = PackPackables(freeze_input);
     }
 
-    FLASHMEM void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
+    void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], MIST_PARAMS);
         UnpackPackables(data[1], pos_cv, density_cv, size_cv);
         UnpackPackables(data[2], spray_cv, pitch_cv, psprd_cv, mix_cv);
@@ -269,7 +200,7 @@ public:
     AudioStream* OutputStream() override { return &output_stream; }
 
 protected:
-    FLASHMEM void SetHelp() override {}
+    void SetHelp() override {}
 
 private:
     enum Cursor : int8_t {
@@ -291,22 +222,7 @@ private:
         CURSOR_LENGTH,
     };
 
-    FLASHMEM int CursorToRow(int c) const {
-        switch (c) {
-            case POS:     case POS_CV:     return 0;
-            case DENSITY: case DENSITY_CV: return 1;
-            case SIZE:    case SIZE_CV:    return 2;
-            case SPRAY:   case SPRAY_CV:   return 3;
-            case PITCH:   case PITCH_CV:   return 4;
-            case PSPRD:   case PSPRD_CV:   return 5;
-            case FREEZE:                   return 6;
-            case MIX:     case MIX_CV:     return 7;
-            default:                       return 0;
-        }
-    }
-
-    int8_t cursor     = POS;
-    int8_t scroll_top_ = 0;
+    int8_t cursor = POS;
 
     // Parameters
     int8_t  pos     = 50;  // 0–100% (buffer depth)
