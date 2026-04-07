@@ -32,7 +32,7 @@ public:
 class AudioEffectMist : public AudioStream {
 public:
     static const size_t MIST_BUFFER_SAMPLES = AUDIO_SAMPLE_RATE; // 1 sec at sample rate
-    static const int    MAX_GRAINS = 16;
+    static const int    MAX_GRAINS = 12;
 
     AudioEffectMist(size_t buf_len = MIST_BUFFER_SAMPLES)
         : AudioStream(1, input_queue_array), g_buffer(buf_len) {}
