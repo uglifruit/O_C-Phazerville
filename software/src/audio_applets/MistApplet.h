@@ -15,14 +15,9 @@ extern "C" uint8_t external_psram_size;
 //   Input → [AudioEffectMist] → wet  ─┐
 //   Input →                    → dry    ─┴→ AudioMixer<2> → Output
 //
-// Parameters:
-//   POS     — playback position in buffer (0=live, 100=oldest), CV-able
-//   DENSITY — grain spawn rate 1–50 Hz, CV-able (bipolar)
-//   SIZE    — grain duration 10–500 ms, CV-able (bipolar)
-//   SPRAY   — position scatter 0–100%, CV-able (bipolar)
-//   PITCH   — playback speed ±12 semitones, CV-able (bipolar)
-//   FREEZE  — gate input stops write pointer (AuxButton = manual latch)
-//   MIX     — wet/dry balance 0–100%, CV-able (bipolar)
+// Parameters (two pages, 4 per page):
+//   Page 1: POS, DENSITY, SIZE, SPRAY
+//   Page 2: PITCH, PSPRD, FREEZE, MIX
 //
 template <AudioChannels Channels>
 class MistApplet : public HemisphereAudioApplet {
@@ -42,7 +37,7 @@ public:
 
     void Controller() override {
         // CV-modulated effective parameter values.
-        float eff_pos     = constrain(0.01f * pos     + pos_cv.InF(),            0.0f, 1.0f);
+        float eff_pos     = constrain(0.01f * pos     + pos_cv.InF(),             0.0f, 1.0f);
         float eff_density = constrain((float)density  + density_cv.InF() * 49.0f, 1.0f, 50.0f);
         float eff_size    = constrain(0.01f * size     + size_cv.InF()  * 0.49f,   0.01f, 0.5f);
         float eff_spray   = constrain(0.01f * spray    + spray_cv.InF(),           0.0f, 1.0f);
@@ -50,6 +45,10 @@ public:
         // Pitch: semitones ±12 → playback ratio.
         float eff_semis   = constrain((float)pitch     + pitch_cv.InF()  * 12.0f, -12.0f, 12.0f);
         float eff_pitch   = SemitonesToRatio(eff_semis);
+
+        // Pitch spread: 0–100% → 0–12 semitones via quadratic curve.
+        float eff_psprd_raw   = constrain(0.01f * psprd + psprd_cv.InF(), 0.0f, 1.0f);
+        float eff_psprd_semis = 12.0f * eff_psprd_raw * eff_psprd_raw;
 
         // Freeze: hardware gate OR latched manual freeze.
         bool frozen = freeze_input.Gate() || manual_freeze_;
@@ -65,6 +64,7 @@ public:
             channels[ch].grain_stream.setSize(eff_size);
             channels[ch].grain_stream.setSpray(eff_spray);
             channels[ch].grain_stream.setPitch(eff_pitch);
+            channels[ch].grain_stream.setPitchSpread(eff_psprd_semis);
             channels[ch].grain_stream.setFreeze(frozen);
             channels[ch].wet_dry_mixer.gain(MistChannel::DRY_CH, dry_gain);
             channels[ch].wet_dry_mixer.gain(MistChannel::WET_CH, wet_gain);
@@ -78,78 +78,55 @@ public:
         }
 
         // ── Grain activity bar (y=7) ──────────────────────────────────────
-        // One filled pixel per active grain; 16 possible = 16px wide at y=7.
         uint8_t active = channels[0].grain_stream.ActiveGrainCount();
         for (uint8_t i = 0; i < 16; i++) {
-            if (i < active) {
-                gfxPixel(1 + i, 7);
-            }
+            if (i < active) gfxPixel(1 + i, 7);
         }
 
-        // ── Row y=15: Position ────────────────────────────────────────────
-        gfxPrint(1, 15, "Pos:");
-        gfxStartCursor();
-        graphics.printf("%3d%%", pos);
-        gfxEndCursor(cursor == POS);
+        // ── Two pages, 4 params each (y=15,25,35,45; 10px per row) ────────
+        // Page 1 (cursor < PITCH): Pos, Den, Sz, Spr
+        // Page 2 (cursor >= PITCH): Pt, PSp, Frz, Mix
+        const bool pg2 = (cursor >= PITCH);
 
-        gfxStartCursor();
-        gfxPrint(pos_cv);
-        gfxEndCursor(cursor == POS_CV, false, pos_cv.InputName());
+        if (!pg2) {
+            gfxPrint(1, 15, "Pos:");
+            gfxStartCursor(); graphics.printf("%3d%%", pos); gfxEndCursor(cursor == POS);
+            gfxStartCursor(); gfxPrint(pos_cv); gfxEndCursor(cursor == POS_CV, false, pos_cv.InputName());
 
-        // ── Row y=25: Density + Size ──────────────────────────────────────
-        gfxPrint(1, 25, "Den:");
-        gfxStartCursor();
-        graphics.printf("%2d", density);
-        gfxEndCursor(cursor == DENSITY);
+            gfxPrint(1, 25, "Den:");
+            gfxStartCursor(); graphics.printf("%2d", density); gfxEndCursor(cursor == DENSITY);
+            gfxStartCursor(); gfxPrint(density_cv); gfxEndCursor(cursor == DENSITY_CV, false, density_cv.InputName());
 
-        gfxStartCursor();
-        gfxPrint(density_cv);
-        gfxEndCursor(cursor == DENSITY_CV, false, density_cv.InputName());
+            gfxPrint(1, 35, "Sz:");
+            gfxStartCursor(); graphics.printf("%3dms", size * 10); gfxEndCursor(cursor == SIZE);
+            gfxStartCursor(); gfxPrint(size_cv); gfxEndCursor(cursor == SIZE_CV, false, size_cv.InputName());
 
-        gfxPrint(33, 25, "Sz:");
-        gfxStartCursor();
-        graphics.printf("%3d", size * 10); // display in ms
-        gfxEndCursor(cursor == SIZE);
+            gfxPrint(1, 45, "Spr:");
+            gfxStartCursor(); graphics.printf("%3d%%", spray); gfxEndCursor(cursor == SPRAY);
+            gfxStartCursor(); gfxPrint(spray_cv); gfxEndCursor(cursor == SPRAY_CV, false, spray_cv.InputName());
+        } else {
+            gfxPrint(1, 15, "Pt:");
+            gfxStartCursor();
+            if (pitch >= 0) graphics.printf("+%2d", pitch);
+            else            graphics.printf("%3d", pitch);
+            gfxEndCursor(cursor == PITCH);
+            gfxStartCursor(); gfxPrint(pitch_cv); gfxEndCursor(cursor == PITCH_CV, false, pitch_cv.InputName());
 
-        gfxStartCursor();
-        gfxPrint(size_cv);
-        gfxEndCursor(cursor == SIZE_CV, false, size_cv.InputName());
+            gfxPrint(1, 25, "PSp:");
+            gfxStartCursor(); graphics.printf("%3d%%", psprd); gfxEndCursor(cursor == PSPRD);
+            gfxStartCursor(); gfxPrint(psprd_cv); gfxEndCursor(cursor == PSPRD_CV, false, psprd_cv.InputName());
 
-        // ── Row y=35: Spray + Pitch ───────────────────────────────────────
-        gfxPrint(1, 35, "Spr:");
-        gfxStartCursor();
-        graphics.printf("%3d%%", spray);
-        gfxEndCursor(cursor == SPRAY);
+            gfxPrint(1, 35, "Frz:");
+            if (manual_freeze_) gfxInvert(1, 35, 24, 8);
+            gfxStartCursor(); gfxPrint(freeze_input); gfxEndCursor(cursor == FREEZE, true, freeze_input.InputName());
 
-        gfxStartCursor();
-        gfxPrint(spray_cv);
-        gfxEndCursor(cursor == SPRAY_CV, false, spray_cv.InputName());
+            gfxPrint(1, 45, "Mix:");
+            gfxStartCursor(); graphics.printf("%3d%%", mix); gfxEndCursor(cursor == MIX);
+            gfxStartCursor(); gfxPrint(mix_cv); gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+        }
 
-        gfxPrint(33, 35, "Pt:");
-        gfxStartCursor();
-        if (pitch >= 0) graphics.printf("+%2d", pitch);
-        else            graphics.printf("%3d", pitch);
-        gfxEndCursor(cursor == PITCH);
-
-        gfxStartCursor();
-        gfxPrint(pitch_cv);
-        gfxEndCursor(cursor == PITCH_CV, false, pitch_cv.InputName());
-
-        // ── Row y=45: Freeze + Mix ────────────────────────────────────────
-        gfxPrint(1, 45, "Frz:");
-        if (manual_freeze_) gfxInvert(1, 45, 24, 8);
-        gfxStartCursor();
-        gfxPrint(freeze_input);
-        gfxEndCursor(cursor == FREEZE, true, freeze_input.InputName()); // spicy: AuxButton = manual freeze
-
-        gfxPrint(33, 45, "Mx:");
-        gfxStartCursor();
-        graphics.printf("%3d%%", mix);
-        gfxEndCursor(cursor == MIX);
-
-        gfxStartCursor();
-        gfxPrint(mix_cv);
-        gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+        // Page indicator "1/2" or "2/2" at bottom-right (3 chars × 6px = 18px, fits at x=46)
+        gfxPrint(46, 56, pg2 ? "2/2" : "1/2");
 
         gfxDisplayInputMapEditor();
     }
@@ -168,6 +145,7 @@ public:
                 IndexedInput(SIZE_CV,    size_cv),
                 IndexedInput(SPRAY_CV,   spray_cv),
                 IndexedInput(PITCH_CV,   pitch_cv),
+                IndexedInput(PSPRD_CV,   psprd_cv),
                 IndexedInput(FREEZE,     freeze_input),
                 IndexedInput(MIX_CV,     mix_cv)
             ))
@@ -183,35 +161,37 @@ public:
         if (EditSelectedInputMap(direction)) return;
 
         switch (cursor) {
-            case POS:      pos     = constrain(pos     + direction, 0, 100);  break;
-            case POS_CV:   pos_cv.ChangeSource(direction);                     break;
-            case DENSITY:  density = constrain(density + direction, 1, 50);   break;
-            case DENSITY_CV: density_cv.ChangeSource(direction);               break;
-            case SIZE:     size    = constrain(size    + direction, 1, 50);   break;
-            case SIZE_CV:  size_cv.ChangeSource(direction);                    break;
-            case SPRAY:    spray   = constrain(spray   + direction, 0, 100);  break;
-            case SPRAY_CV: spray_cv.ChangeSource(direction);                   break;
-            case PITCH:    pitch   = constrain(pitch   + direction, -12, 12); break;
-            case PITCH_CV: pitch_cv.ChangeSource(direction);                   break;
-            case FREEZE:   freeze_input.ChangeSource(direction);               break;
-            case MIX:      mix     = constrain(mix     + direction, 0, 100);  break;
-            case MIX_CV:   mix_cv.ChangeSource(direction);                     break;
+            case POS:        pos     = constrain(pos     + direction, 0, 100);  break;
+            case POS_CV:     pos_cv.ChangeSource(direction);                     break;
+            case DENSITY:    density = constrain(density + direction, 1, 50);   break;
+            case DENSITY_CV: density_cv.ChangeSource(direction);                 break;
+            case SIZE:       size    = constrain(size    + direction, 1, 50);   break;
+            case SIZE_CV:    size_cv.ChangeSource(direction);                    break;
+            case SPRAY:      spray   = constrain(spray   + direction, 0, 100);  break;
+            case SPRAY_CV:   spray_cv.ChangeSource(direction);                   break;
+            case PITCH:      pitch   = constrain(pitch   + direction, -12, 12); break;
+            case PITCH_CV:   pitch_cv.ChangeSource(direction);                   break;
+            case PSPRD:      psprd   = constrain(psprd   + direction, 0, 100);  break;
+            case PSPRD_CV:   psprd_cv.ChangeSource(direction);                   break;
+            case FREEZE:     freeze_input.ChangeSource(direction);               break;
+            case MIX:        mix     = constrain(mix     + direction, 0, 100);  break;
+            case MIX_CV:     mix_cv.ChangeSource(direction);                     break;
             default: break;
         }
     }
 
-#define MIST_PARAMS  pos, density, size, spray, pitch, mix
+#define MIST_PARAMS  pos, density, size, spray, pitch, psprd, mix
     void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(MIST_PARAMS);
         data[1] = PackPackables(pos_cv, density_cv, size_cv);
-        data[2] = PackPackables(spray_cv, pitch_cv, mix_cv);
+        data[2] = PackPackables(spray_cv, pitch_cv, psprd_cv, mix_cv);
         data[3] = PackPackables(freeze_input);
     }
 
     void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], MIST_PARAMS);
         UnpackPackables(data[1], pos_cv, density_cv, size_cv);
-        UnpackPackables(data[2], spray_cv, pitch_cv, mix_cv);
+        UnpackPackables(data[2], spray_cv, pitch_cv, psprd_cv, mix_cv);
         UnpackPackables(data[3], freeze_input);
     }
 #undef MIST_PARAMS
@@ -234,6 +214,8 @@ private:
         SPRAY_CV,
         PITCH,
         PITCH_CV,
+        PSPRD,
+        PSPRD_CV,
         FREEZE,
         MIX,
         MIX_CV,
@@ -253,6 +235,8 @@ private:
     CVInputMap spray_cv;
     int8_t  pitch   = 0;   // −12 to +12 semitones
     CVInputMap pitch_cv;
+    int8_t  psprd   = 0;   // 0–100% pitch spread (0=none, 100=±1oct)
+    CVInputMap psprd_cv;
     DigitalInputMap freeze_input;
     int8_t  mix     = 80;  // 0–100% wet
     CVInputMap mix_cv;

@@ -19,12 +19,13 @@ public:
 
 // Live granular processor. Continuously records audio into a circular PSRAM
 // buffer. On each Controller() tick, the applet calls setters to configure:
-//   Position — where in the buffer grains are spawned (0=live, 1=oldest)
-//   Density  — grain spawn rate in Hz
-//   Size     — grain duration in seconds
-//   Spray    — position scatter (randomises start point per grain)
-//   Pitch    — playback speed ratio (0.5=−1oct, 1.0=unity, 2.0=+1oct)
-//   Freeze   — stops the write pointer; grains replay recorded history only
+//   Position    — where in the buffer grains are spawned (0=live, 1=oldest)
+//   Density     — grain spawn rate in Hz
+//   Size        — grain duration in seconds
+//   Spray       — position scatter (randomises start point per grain)
+//   Pitch       — playback speed ratio (0.5=−1oct, 1.0=unity, 2.0=+1oct)
+//   PitchSpread — random pitch offset per grain in semitones (0=none)
+//   Freeze      — stops the write pointer; grains replay recorded history only
 //
 // Output is the summed wet signal only; dry/wet blend is handled by the
 // AudioMixer<2> in MistApplet.
@@ -42,12 +43,13 @@ public:
 
     // Setters — called from Controller() (ISR rate ~16.6 kHz).
     // Parameters are volatile; update() snapshots them once per block.
-    void setPosition(float p) { pos_      = p; }
-    void setDensity(float hz) { density_  = hz; }
-    void setSize(float secs)  { size_     = secs; }
-    void setSpray(float s)    { spray_    = s; }
-    void setPitch(float r)    { pitch_    = r; }
-    void setFreeze(bool f)    { freeze_   = f; }
+    void setPosition(float p)        { pos_     = p; }
+    void setDensity(float hz)        { density_ = hz; }
+    void setSize(float secs)         { size_    = secs; }
+    void setSpray(float s)           { spray_   = s; }
+    void setPitch(float r)           { pitch_   = r; }
+    void setPitchSpread(float semis) { psprd_   = semis; }
+    void setFreeze(bool f)           { freeze_  = f; }
 
     uint8_t ActiveGrainCount() const {
         uint8_t n = 0;
@@ -66,6 +68,7 @@ public:
         const float   cur_size    = size_;
         const float   cur_spray   = spray_;
         const float   cur_pitch   = pitch_;
+        const float   cur_psprd   = psprd_;
         const bool    cur_freeze  = freeze_;
         const size_t  buf_size    = g_buffer.NumSamples;
 
@@ -95,7 +98,7 @@ public:
             spawn_phase_ += cur_density / AUDIO_SAMPLE_RATE_EXACT;
             if (spawn_phase_ >= 1.0f) {
                 spawn_phase_ -= 1.0f;
-                spawnGrain(cur_pos, cur_size, cur_spray, cur_pitch, buf_size);
+                spawnGrain(cur_pos, cur_size, cur_spray, cur_pitch, cur_psprd, buf_size);
             }
 
             // ── Sum active grains ──────────────────────────────────────────
@@ -163,10 +166,11 @@ private:
     volatile float size_    = 0.1f;   // seconds
     volatile float spray_   = 0.0f;   // fraction of buffer
     volatile float pitch_   = 1.0f;   // ratio
+    volatile float psprd_   = 0.0f;   // random pitch spread per grain (semitones)
     volatile bool  freeze_  = false;
 
     void spawnGrain(float cur_pos, float cur_size, float cur_spray,
-                    float cur_pitch, size_t buf_size) {
+                    float cur_pitch, float cur_psprd, size_t buf_size) {
         // Find an inactive slot.
         Grain* g = nullptr;
         for (auto& gr : grains) {
@@ -189,8 +193,15 @@ private:
         if (glen < (size_t)AUDIO_BLOCK_SAMPLES) glen = AUDIO_BLOCK_SAMPLES;
         if (glen > buf_size / 2)                glen = buf_size / 2;
 
+        // Apply per-grain pitch spread: random offset in ±cur_psprd semitones.
+        float grain_pitch = cur_pitch;
+        if (cur_psprd > 0.0f) {
+            float rand_semis = cur_psprd * (stmlib::Random::GetFloat() * 2.0f - 1.0f);
+            grain_pitch *= powf(2.0f, rand_semis / 12.0f);
+        }
+
         g->read_ptr  = rptr;
-        g->pitch     = cur_pitch;
+        g->pitch     = grain_pitch;
         g->grain_len = glen;
         g->phase     = 0;
         g->active    = true;

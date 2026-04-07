@@ -72,7 +72,8 @@ DMAMEM std::tuple<
   VcaApplet<STEREO>,
   FilterFolderApplet<STEREO>,
   WavPlayerApplet<STEREO>,
-  UpsampledApplet<STEREO>>
+  UpsampledApplet<STEREO>,
+  MistApplet<STEREO>>
     stereo_processors_pool[NUM_SLOTS - 1];
 
 // Helper to extract the tuple type from an array... thanks ChatGPT...
