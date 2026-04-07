@@ -16,7 +16,6 @@
 #include "audio_applets/WAVPlayerApplet.h"
 #include "audio_applets/HandSawApplet.h"
 #include "audio_applets/FreeverbApplet.h"
-#include "audio_applets/SamverbApplet.h"
 #include "audio_applets/PhaserApplet.h"
 #include "audio_applets/ThreeBandz.h"
 #include "audio_applets/FMDrumApplet.h"
@@ -54,7 +53,6 @@ DMAMEM std::tuple<
   DelayApplet<MONO>,
   PhazerApplet,
   ReverbApplet,
-  BungverbApplet,
   DynamicsApplet<MONO>,
   UpsampledApplet<MONO>,
   GlitchApplet<MONO>>
