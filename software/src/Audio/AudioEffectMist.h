@@ -76,6 +76,10 @@ public:
         const GrainShape cur_shape   = shape_;
         const size_t     buf_size    = g_buffer.NumSamples;
 
+        // Cap density so avg concurrent grains stays below MAX_GRAINS.
+        const float safe_density = (cur_density * cur_size < (float)(MAX_GRAINS - 1))
+            ? cur_density : (float)(MAX_GRAINS - 1) / cur_size;
+
         // Write incoming audio unless frozen.
         if (in && !cur_freeze) g_buffer.Write(in);
 
@@ -99,7 +103,7 @@ public:
 
             // ── Grain scheduling ───────────────────────────────────────────
             // Phase accumulator advances by density/AUDIO_SAMPLE_RATE per sample.
-            spawn_phase_ += cur_density / AUDIO_SAMPLE_RATE_EXACT;
+            spawn_phase_ += safe_density / AUDIO_SAMPLE_RATE_EXACT;
             if (spawn_phase_ >= 1.0f) {
                 spawn_phase_ -= 1.0f;
                 spawnGrain(cur_pos, cur_size, cur_spray, cur_pitch, cur_psprd, cur_shape, buf_size);
@@ -115,10 +119,22 @@ public:
                 switch (g.shape) {
                     case SHAPE_TRIANGLE:
                         w = (t < 0.5f) ? (2.0f * t) : (2.0f - 2.0f * t); break;
-                    case SHAPE_RAMP_UP:
-                        w = t; break;
-                    case SHAPE_RAMP_DOWN:
-                        w = 1.0f - t; break;
+                    case SHAPE_RAMP_UP: {
+                        size_t fl = g.grain_len >> 3;
+                        if (fl > 220) fl = 220;
+                        float tail = (g.phase >= g.grain_len - fl)
+                            ? (float)(g.grain_len - g.phase) / (float)fl : 1.0f;
+                        w = t * tail;
+                        break;
+                    }
+                    case SHAPE_RAMP_DOWN: {
+                        size_t fl = g.grain_len >> 3;
+                        if (fl > 220) fl = 220;
+                        float head = (g.phase < fl)
+                            ? (float)g.phase / (float)fl : 1.0f;
+                        w = (1.0f - t) * head;
+                        break;
+                    }
                     default: { // SHAPE_HANN: sin²(π × t)
                         float s = sinf(3.14159265358979f * t);
                         w = s * s;
@@ -194,8 +210,10 @@ private:
         }
         if (!g) return; // all slots busy — skip this spawn
 
-        // Randomise position by ±spray within the buffer.
-        float scatter = cur_spray * (stmlib::Random::GetFloat() * 2.0f - 1.0f);
+        // Randomise position by ±spray, clamped so it can't overshoot either end.
+        float max_spray = cur_pos < 1.0f - cur_pos ? cur_pos : 1.0f - cur_pos;
+        float eff_spray = cur_spray < max_spray ? cur_spray : max_spray;
+        float scatter = eff_spray * (stmlib::Random::GetFloat() * 2.0f - 1.0f);
         float eff_pos = cur_pos + scatter;
         if (eff_pos < 0.0f) eff_pos = 0.0f;
         if (eff_pos > 1.0f) eff_pos = 1.0f;
