@@ -249,14 +249,14 @@ public:
 
     void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(pitch_hz, dec, swp, rto, fmi, fmd_s);
-        data[1] = PackPackables(noi, ndc, mix, trg, mix_cv, preset_idx);
+        data[1] = PackPackables(noi, ndc, mix, trg, mix_cv);
         data[2] = PackPackables(pitch_cv, dec_cv, swp_cv, rto_cv);
         data[3] = PackPackables(fmi_cv, fmd_cv, noi_cv, ndc_cv);
     }
 
     void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], pitch_hz, dec, swp, rto, fmi, fmd_s);
-        UnpackPackables(data[1], noi, ndc, mix, trg, mix_cv, preset_idx);
+        UnpackPackables(data[1], noi, ndc, mix, trg, mix_cv);
         UnpackPackables(data[2], pitch_cv, dec_cv, swp_cv, rto_cv);
         UnpackPackables(data[3], fmi_cv, fmd_cv, noi_cv, ndc_cv);
     }
