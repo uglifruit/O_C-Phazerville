@@ -162,25 +162,20 @@ public:
     void View() override {
         // Header
         gfxPrint(1, 2, "FMDrum");
-        if (preset_idx < NUM_PRESETS)
-            gfxPrint(40, 2, PRESETS[preset_idx].name);
-        else
-            gfxPrint(40, 2, "Rnd");
         if (trigger_flash)
             gfxIcon(56, 2, ZAP_ICON);
 
-        // Draw 6 visible rows from scroll_top
-        for (int row = 0; row < 6; ++row) {
-            int param = scroll_top + row;
-            if (param >= NUM_CURSORS) break;
-            int y = 15 + row * 8;
-            DrawRow(param, y);
+        // Draw 6 visible rows from scroll_top (scroll_top is a row index)
+        for (int i = 0; i < 6; ++i) {
+            int row = scroll_top + i;
+            if (row >= NUM_ROWS) break;
+            DrawRow(row, 15 + i * 8);
         }
 
         // Scroll arrows
         if (scroll_top > 0)
             gfxIcon(57, 14, UP_ICON);
-        if (scroll_top + 6 < NUM_CURSORS)
+        if (scroll_top + 6 < NUM_ROWS)
             gfxIcon(57, 56, DOWN_ICON);
 
         gfxDisplayInputMapEditor();
@@ -189,19 +184,26 @@ public:
     void OnEncoderMove(int direction) override {
         if (!EditMode()) {
             MoveCursor(cursor, direction, NUM_CURSORS - 1);
-            // Keep cursor visible
-            if (cursor < scroll_top)
-                scroll_top = cursor;
-            else if (cursor >= scroll_top + 6)
-                scroll_top = cursor - 5;
-            scroll_top = constrain(scroll_top, 0, NUM_CURSORS - 6);
+            // Scroll to keep active row visible
+            int row = cursorToRow(cursor);
+            if (row < scroll_top)
+                scroll_top = row;
+            else if (row >= scroll_top + 6)
+                scroll_top = row - 5;
+            scroll_top = constrain(scroll_top, 0, NUM_ROWS - 6);
             return;
         }
 
         if (EditSelectedInputMap(direction)) return;
 
         switch (cursor) {
-            case TRG:    trg.ChangeSource(direction); break;
+            case TRG:
+                trg.ChangeSource(direction);
+                break;
+            case PRESET:
+                preset_idx = (preset_idx + (NUM_PRESETS + 1) + direction) % (NUM_PRESETS + 1);
+                LoadPreset(preset_idx);
+                break;
             case PIT:    pitch_hz = constrain(pitch_hz + direction * 5, 10, 2000); break;
             case DCY:    dec      = constrain(dec + direction * 5, 10, 2000); break;
             case SWP:    swp      = constrain(swp + direction, 0, 100); break;
@@ -225,11 +227,7 @@ public:
     }
 
     void OnButtonPress() override {
-        // TRG row opens DigitalInputMap editor via CursorToggle (edit mode changes source)
-        if (cursor == TRG) {
-            CursorToggle();
-            return;
-        }
+        if (cursor == TRG) { CursorToggle(); return; }
         if (CheckEditInputMapPress(cursor,
               IndexedInput(CV_PIT, pitch_cv),
               IndexedInput(CV_DCY, dec_cv),
@@ -251,14 +249,14 @@ public:
 
     void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(pitch_hz, dec, swp, rto, fmi, fmd_s);
-        data[1] = PackPackables(noi, ndc, mix, trg, mix_cv);
+        data[1] = PackPackables(noi, ndc, mix, trg, mix_cv, preset_idx);
         data[2] = PackPackables(pitch_cv, dec_cv, swp_cv, rto_cv);
         data[3] = PackPackables(fmi_cv, fmd_cv, noi_cv, ndc_cv);
     }
 
     void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], pitch_hz, dec, swp, rto, fmi, fmd_s);
-        UnpackPackables(data[1], noi, ndc, mix, trg, mix_cv);
+        UnpackPackables(data[1], noi, ndc, mix, trg, mix_cv, preset_idx);
         UnpackPackables(data[2], pitch_cv, dec_cv, swp_cv, rto_cv);
         UnpackPackables(data[3], fmi_cv, fmd_cv, noi_cv, ndc_cv);
     }
@@ -269,10 +267,25 @@ protected:
 private:
     enum Cursor : int8_t {
         TRG,
-        PIT, DCY, SWP, RTO, FMI, FMD, NOI, NDC, MIX,
-        CV_PIT, CV_DCY, CV_SWP, CV_RTO, CV_FMI, CV_FMD, CV_NOI, CV_NDC, CV_MIX,
-        NUM_CURSORS
+        PRESET,
+        PIT, CV_PIT,
+        DCY, CV_DCY,
+        SWP, CV_SWP,
+        RTO, CV_RTO,
+        FMI, CV_FMI,
+        FMD, CV_FMD,
+        NOI, CV_NOI,
+        NDC, CV_NDC,
+        MIX, CV_MIX,
+        NUM_CURSORS  // 20
     };
+
+    static const int NUM_ROWS = 11; // TRG, PRESET, + 9 param-pair rows
+
+    int8_t cursorToRow(int8_t c) const {
+        if (c <= PRESET) return c;
+        return 2 + (c - PIT) / 2;
+    }
 
     // --- Parameters ---
     int16_t pitch_hz = 100;  // 10..2000 Hz
@@ -328,12 +341,13 @@ private:
         const char* name;
     };
 
-    static const int NUM_PRESETS = 5;
+    static const int NUM_PRESETS = 6;
     static constexpr FMDrumPreset PRESETS[NUM_PRESETS] = {
         //        hz   dec  swp  rto  fmi  fmd noi  ndc  mix  name
         {  60,   500,  80,  10,  90,  20,   5,  30,  0, "Kick"  },
         { 200,   200,  30,  15,  60,  10,  70, 120,  0, "Snare" },
         { 800,    40,   0,  10,  20,   3, 100,  40,  0, "HiHat" },
+        { 800,   200,   0,  10,  20,  10, 100, 120,  0, "O.Hat" },
         { 120,   350,  60,  12,  70,  15,  15,  60,  0, "Tom"   },
         { 300,    80,   5,   8,  40,   5,  90,  80,  0, "Clap"  },
     };
@@ -364,120 +378,100 @@ private:
         }
     }
 
-    void DrawRow(int param, int y) {
-        switch (param) {
-            case TRG:
+    // DrawRow renders a display row (by row index 0..NUM_ROWS-1).
+    // Each param row shows value cursor then CV source cursor inline.
+    void DrawRow(int row, int y) {
+        switch (row) {
+            case 0: // TRG
                 gfxPrint(1, y, "TRG:");
                 gfxStartCursor(25, y);
                 gfxPrint(trg);
                 gfxEndCursor(cursor == TRG, false, trg.InputName());
                 break;
-            case PIT:
+            case 1: // PRESET
+                gfxPrint(1, y, "Type:");
+                gfxStartCursor(31, y);
+                gfxPrint(preset_idx < NUM_PRESETS ? PRESETS[preset_idx].name : "Rnd");
+                gfxEndCursor(cursor == PRESET);
+                break;
+            case 2: // Pit + CV
                 gfxPrint(1, y, "Pit:");
                 gfxStartCursor(25, y);
                 graphics.printf("%4d", (int)pitch_hz);
                 gfxEndCursor(cursor == PIT);
+                gfxStartCursor();
+                gfxPrint(pitch_cv);
+                gfxEndCursor(cursor == CV_PIT, false, pitch_cv.InputName());
                 break;
-            case DCY:
+            case 3: // Dec + CV
                 gfxPrint(1, y, "Dec:");
                 gfxStartCursor(25, y);
                 graphics.printf("%4d", (int)dec);
                 gfxEndCursor(cursor == DCY);
+                gfxStartCursor();
+                gfxPrint(dec_cv);
+                gfxEndCursor(cursor == CV_DCY, false, dec_cv.InputName());
                 break;
-            case SWP:
+            case 4: // Swp + CV
                 gfxPrint(1, y, "Swp:");
                 gfxStartCursor(25, y);
                 graphics.printf("%3d%%", (int)swp);
                 gfxEndCursor(cursor == SWP);
+                gfxStartCursor();
+                gfxPrint(swp_cv);
+                gfxEndCursor(cursor == CV_SWP, false, swp_cv.InputName());
                 break;
-            case RTO:
+            case 5: // Rto + CV
                 gfxPrint(1, y, "Rto:");
                 gfxStartCursor(25, y);
                 graphics.printf("%2d.%1d", rto / 10, rto % 10);
                 gfxEndCursor(cursor == RTO);
+                gfxStartCursor();
+                gfxPrint(rto_cv);
+                gfxEndCursor(cursor == CV_RTO, false, rto_cv.InputName());
                 break;
-            case FMI:
+            case 6: // FMi + CV
                 gfxPrint(1, y, "FMi:");
                 gfxStartCursor(25, y);
                 graphics.printf("%3d%%", (int)fmi);
                 gfxEndCursor(cursor == FMI);
+                gfxStartCursor();
+                gfxPrint(fmi_cv);
+                gfxEndCursor(cursor == CV_FMI, false, fmi_cv.InputName());
                 break;
-            case FMD:
+            case 7: // FMd + CV
                 gfxPrint(1, y, "FMd:");
                 gfxStartCursor(25, y);
                 graphics.printf("%4d", (int)fmd_s * 10);
                 gfxEndCursor(cursor == FMD);
+                gfxStartCursor();
+                gfxPrint(fmd_cv);
+                gfxEndCursor(cursor == CV_FMD, false, fmd_cv.InputName());
                 break;
-            case NOI:
+            case 8: // Noi + CV
                 gfxPrint(1, y, "Noi:");
                 gfxStartCursor(25, y);
                 graphics.printf("%3d%%", (int)noi);
                 gfxEndCursor(cursor == NOI);
+                gfxStartCursor();
+                gfxPrint(noi_cv);
+                gfxEndCursor(cursor == CV_NOI, false, noi_cv.InputName());
                 break;
-            case NDC:
+            case 9: // Ndc + CV
                 gfxPrint(1, y, "Ndc:");
                 gfxStartCursor(25, y);
                 graphics.printf("%4d", (int)ndc);
                 gfxEndCursor(cursor == NDC);
+                gfxStartCursor();
+                gfxPrint(ndc_cv);
+                gfxEndCursor(cursor == CV_NDC, false, ndc_cv.InputName());
                 break;
-            case MIX:
+            case 10: // Mix + CV
                 gfxPrint(1, y, "Mix:");
                 gfxStartCursor(25, y);
                 graphics.printf("%3d%%", (int)mix);
                 gfxEndCursor(cursor == MIX);
-                break;
-            // CV rows
-            case CV_PIT:
-                gfxPrint(1, y, " Pit>");
-                gfxStartCursor(31, y);
-                gfxPrint(pitch_cv);
-                gfxEndCursor(cursor == CV_PIT, false, pitch_cv.InputName());
-                break;
-            case CV_DCY:
-                gfxPrint(1, y, " Dec>");
-                gfxStartCursor(31, y);
-                gfxPrint(dec_cv);
-                gfxEndCursor(cursor == CV_DCY, false, dec_cv.InputName());
-                break;
-            case CV_SWP:
-                gfxPrint(1, y, " Swp>");
-                gfxStartCursor(31, y);
-                gfxPrint(swp_cv);
-                gfxEndCursor(cursor == CV_SWP, false, swp_cv.InputName());
-                break;
-            case CV_RTO:
-                gfxPrint(1, y, " Rto>");
-                gfxStartCursor(31, y);
-                gfxPrint(rto_cv);
-                gfxEndCursor(cursor == CV_RTO, false, rto_cv.InputName());
-                break;
-            case CV_FMI:
-                gfxPrint(1, y, " FMi>");
-                gfxStartCursor(31, y);
-                gfxPrint(fmi_cv);
-                gfxEndCursor(cursor == CV_FMI, false, fmi_cv.InputName());
-                break;
-            case CV_FMD:
-                gfxPrint(1, y, " FMd>");
-                gfxStartCursor(31, y);
-                gfxPrint(fmd_cv);
-                gfxEndCursor(cursor == CV_FMD, false, fmd_cv.InputName());
-                break;
-            case CV_NOI:
-                gfxPrint(1, y, " Noi>");
-                gfxStartCursor(31, y);
-                gfxPrint(noi_cv);
-                gfxEndCursor(cursor == CV_NOI, false, noi_cv.InputName());
-                break;
-            case CV_NDC:
-                gfxPrint(1, y, " Ndc>");
-                gfxStartCursor(31, y);
-                gfxPrint(ndc_cv);
-                gfxEndCursor(cursor == CV_NDC, false, ndc_cv.InputName());
-                break;
-            case CV_MIX:
-                gfxPrint(1, y, " Mix>");
-                gfxStartCursor(31, y);
+                gfxStartCursor();
                 gfxPrint(mix_cv);
                 gfxEndCursor(cursor == CV_MIX, false, mix_cv.InputName());
                 break;
@@ -487,5 +481,4 @@ private:
     }
 };
 
-// Required for constexpr static member with non-trivial destructor
 constexpr FMDrumApplet::FMDrumPreset FMDrumApplet::PRESETS[FMDrumApplet::NUM_PRESETS];
