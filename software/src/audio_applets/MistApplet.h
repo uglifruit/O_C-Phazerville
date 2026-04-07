@@ -25,23 +25,27 @@ extern "C" uint8_t external_psram_size;
 //   FREEZE  — gate input stops write pointer (AuxButton = manual latch)
 //   MIX     — wet/dry balance 0–100%, CV-able (bipolar)
 //
+// FLASHMEM annotations on all non-DSP methods move their compiled code from
+// ITCM (RAM1) to execute-in-place Flash, reducing the RAM1 code footprint.
+// AudioEffectMist::update() and spawnGrain() are intentionally left in ITCM.
+//
 template <AudioChannels Channels>
 class MistApplet : public HemisphereAudioApplet {
 public:
     const char* applet_name() override { return "Mist"; }
 
-    void Start() override {
+    FLASHMEM void Start() override {
         for (int ch = 0; ch < Channels; ch++) {
             channels[ch].Start(this, ch, input_stream, output_stream);
         }
     }
 
-    void Unload() override {
+    FLASHMEM void Unload() override {
         for (auto& ch : channels) ch.Stop();
         AllowRestart();
     }
 
-    void Controller() override {
+    FLASHMEM void Controller() override {
         // CV-modulated effective parameter values.
         float eff_pos     = constrain(0.01f * pos     + pos_cv.InF(),             0.0f, 1.0f);
         float eff_density = constrain((float)density  + density_cv.InF() * 49.0f, 1.0f, 50.0f);
@@ -79,7 +83,7 @@ public:
         }
     }
 
-    void View() override {
+    FLASHMEM void View() override {
         if (!channels[0].grain_stream.IsReady()) {
             gfxPrint(1, 15, "No PSRAM");
             return;
@@ -197,12 +201,12 @@ public:
     }
 
     // AuxButton latches manual freeze for performance use without a patch cable.
-    void AuxButton() override {
+    FLASHMEM void AuxButton() override {
         manual_freeze_ ^= 1;
         CancelEdit();
     }
 
-    void OnButtonPress() override {
+    FLASHMEM void OnButtonPress() override {
         if (CheckEditInputMapPress(
                 cursor,
                 IndexedInput(POS_CV,     pos_cv),
@@ -218,7 +222,7 @@ public:
         CursorToggle();
     }
 
-    void OnEncoderMove(int direction) override {
+    FLASHMEM void OnEncoderMove(int direction) override {
         if (!EditMode()) {
             MoveCursor(cursor, direction, CURSOR_LENGTH - 1);
             return;
@@ -246,14 +250,14 @@ public:
     }
 
 #define MIST_PARAMS  pos, density, size, spray, pitch, psprd, mix
-    void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(MIST_PARAMS);
         data[1] = PackPackables(pos_cv, density_cv, size_cv);
         data[2] = PackPackables(spray_cv, pitch_cv, psprd_cv, mix_cv);
         data[3] = PackPackables(freeze_input);
     }
 
-    void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], MIST_PARAMS);
         UnpackPackables(data[1], pos_cv, density_cv, size_cv);
         UnpackPackables(data[2], spray_cv, pitch_cv, psprd_cv, mix_cv);
@@ -265,7 +269,7 @@ public:
     AudioStream* OutputStream() override { return &output_stream; }
 
 protected:
-    void SetHelp() override {}
+    FLASHMEM void SetHelp() override {}
 
 private:
     enum Cursor : int8_t {
@@ -287,7 +291,7 @@ private:
         CURSOR_LENGTH,
     };
 
-    int CursorToRow(int c) const {
+    FLASHMEM int CursorToRow(int c) const {
         switch (c) {
             case POS:     case POS_CV:     return 0;
             case DENSITY: case DENSITY_CV: return 1;
