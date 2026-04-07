@@ -95,7 +95,7 @@ public:
             gfxStartCursor(); gfxPrint(pos_cv); gfxEndCursor(cursor == POS_CV, false, pos_cv.InputName());
 
             gfxPrint(1, 25, "Den:");
-            gfxStartCursor(); graphics.printf("%2d", density); gfxEndCursor(cursor == DENSITY);
+            gfxStartCursor(); graphics.printf("%2dHz", density); gfxEndCursor(cursor == DENSITY);
             gfxStartCursor(); gfxPrint(density_cv); gfxEndCursor(cursor == DENSITY_CV, false, density_cv.InputName());
 
             gfxPrint(1, 35, "Sz:");
@@ -125,13 +125,13 @@ public:
             gfxStartCursor(); graphics.printf("%3d%%", mix); gfxEndCursor(cursor == MIX);
             gfxStartCursor(); gfxPrint(mix_cv); gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
 
-            static const char* SHAPE_NAMES[] = { "Hann", "Tri ", "R-Up", "R-Dn" };
+            static const char* SHAPE_NAMES[] = { "Sine", "Tri ", "R-Up", "R-Dn" };
             gfxPrint(1, 55, "Shp:");
             gfxStartCursor(); gfxPrint(SHAPE_NAMES[shape]); gfxEndCursor(cursor == SHAPE);
         }
 
-        // Page indicator — single char at bottom-right
-        gfxPrint(60, 56, pg2 ? "2" : "1");
+        // Page indicator — ">" (more ahead) on page 1, "<" (go back) on page 2
+        gfxPrint(58, 56, pg2 ? "<" : ">");
 
         gfxDisplayInputMapEditor();
     }
@@ -247,7 +247,7 @@ private:
     DigitalInputMap freeze_input;
     int8_t  mix     = 80;  // 0–100% wet
     CVInputMap mix_cv;
-    int8_t  shape   = 0;   // 0=Hann, 1=Triangle, 2=Ramp-Up, 3=Ramp-Down
+    int8_t  shape   = 1;   // 0=Sine, 1=Triangle, 2=Ramp-Up, 3=Ramp-Down
 
     bool manual_freeze_ = false;
 
