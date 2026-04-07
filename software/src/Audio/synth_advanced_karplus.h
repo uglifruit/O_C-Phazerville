@@ -14,7 +14,7 @@
 //   - Tunable 1st-order IIR in feedback loop: independent Brightness control
 //   - Pitch-compensated loop gain: perceptual Decay time independent of pitch
 //   - Resonant bandpass "Body" filter applied to excitation noise burst
-//   - One-pole smoothing on delay length: silent pitch transitions (no zipper)
+//   - Delay length applied directly each block (no smoothing — KS has no phase discontinuity)
 //
 // Thread safety:
 //   setFrequency / setDecay / setBrightness / setBody: call anytime; atomic enough
@@ -49,7 +49,6 @@ public:
     if (delay_line_) {
       write_idx_        = 0;
       iir_state_        = 0.0f;
-      smooth_delay_     = target_delay_;
       trigger_pending_  = false;
       excite_remaining_ = 0;
     }
@@ -64,7 +63,6 @@ public:
   // --- Parameter setters (call every Controller() tick) -----------------
 
   // Target fundamental frequency in Hz.
-  // One-pole smoothing is applied in update() to avoid zipper noise.
   void setFrequency(float hz) {
     target_hz_ = constrain(hz, MIN_HZ, MAX_HZ);
     recalculateDelay();
@@ -114,11 +112,6 @@ public:
     audio_block_t* out = allocate();
     if (!out) return;
 
-    // --- One-pole pitch smoothing (~10 ms time constant per block) -------
-    // ONE_POLE macro: out += coeff * (in - out)
-    // coeff ≈ 1 - exp(-128 / (0.010 * 44100)) ≈ 0.25
-    ONE_POLE(smooth_delay_, target_delay_, 0.25f);
-
     // --- Pitch-compensated loop gain (computed once per block) -----------
     // Map decay param to target time: T = 0.002 * e^(d * ln3000)  [0.002 s…6 s]
     // Min 0.001 s → RT60 ≈ 14 ms (very short staccato). Max 6 s → RT60 ≈ 41 s.
@@ -130,7 +123,7 @@ public:
     // INCORRECT Do NOT include L in the exponent — that would apply a full period's
     // INCORRECT attenuation on every sample, decaying the string L× too fast.
     // INCORRECT - float loop_gain = expf(-1.0f / (T_s * AUDIO_SAMPLE_RATE_EXACT));
-    float loop_gain = expf(-smooth_delay_ / (T_s * AUDIO_SAMPLE_RATE_EXACT));
+    float loop_gain = expf(-target_delay_ / (T_s * AUDIO_SAMPLE_RATE_EXACT));
     // Hard cap: system must stay stable regardless of parameter extremes.
     // Max legitimate gain at T_s=6 s is exp(-1/(6*44100)) ≈ 0.9999985 — keep
     // cap above that so the full decay range is usable.
@@ -143,9 +136,7 @@ public:
     // eliminates the need for a memset entirely.
     if (trigger_pending_) {
       trigger_pending_ = false;
-      // Snap to target pitch immediately so excitation fills at correct length.
-      smooth_delay_     = target_delay_;
-      int n = static_cast<int>(smooth_delay_);
+      int n = static_cast<int>(target_delay_);
       if (n < 2)                              n = 2;
       if (n >= static_cast<int>(BUFFER_SIZE)) n = BUFFER_SIZE - 1;
       excite_remaining_ = n;
@@ -162,12 +153,12 @@ public:
     for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
 
       // Fractional read position: L samples behind the write head
-      float read_pos = static_cast<float>(write_idx_) - smooth_delay_;
+      float read_pos = static_cast<float>(write_idx_) - target_delay_;
       if (read_pos < 0.0f) read_pos += static_cast<float>(BUFFER_SIZE);
 
       // Extract fractional part from the UNMASKED floor of read_pos.
       // After the negative-wrap guard, read_pos can be up to ~8190 (when
-      // write_idx_ is near 4095 and smooth_delay_ is near BUFFER_SIZE).
+      // write_idx_ is near 4095 and target_delay_ is near BUFFER_SIZE).
       // r0_raw may therefore exceed BUFFER_MASK. frac MUST be computed from
       // r0_raw; using (r0_raw & BUFFER_MASK) instead would give frac ≈ 4096
       // and corrupt the interpolation.
@@ -230,7 +221,6 @@ private:
   // --- Pitch smoothing ----------------------------------------------------
   float target_hz_    = 441.0f;   // stored so setBrightness() can recompute delay
   float target_delay_ = 100.0f;   // samples (≈ 441 Hz default)
-  float smooth_delay_ = 100.0f;   // one-pole smoothed version
 
   // --- Feedback filter (Brightness) ---------------------------------------
   float iir_alpha_ = 0.5f;        // computed from brightness_param
