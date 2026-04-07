@@ -79,7 +79,7 @@ public:
 
         // ── Grain activity bar (y=7) ──────────────────────────────────────
         uint8_t active = channels[0].grain_stream.ActiveGrainCount();
-        for (uint8_t i = 0; i < 16; i++) {
+        for (uint8_t i = 0; i < AudioEffectMist::MAX_GRAINS; i++) {
             if (i < active) gfxPixel(1 + i, 7);
         }
 
