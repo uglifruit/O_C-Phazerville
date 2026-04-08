@@ -19,6 +19,7 @@
 #include "audio_applets/SamverbApplet.h"
 #include "audio_applets/PhaserApplet.h"
 #include "audio_applets/ThreeBandz.h"
+#include "audio_applets/FreezeApplet.h"
 
 const size_t NUM_SLOTS = 5;
 
@@ -53,6 +54,7 @@ DMAMEM std::tuple<
   ReverbApplet,
   BungverbApplet,
   DynamicsApplet<MONO>,
+  FreezeApplet<MONO>,
   UpsampledApplet<MONO>>
     mono_processors_pool[2][NUM_SLOTS - 1];
 DMAMEM std::tuple<
@@ -67,6 +69,7 @@ DMAMEM std::tuple<
   VcaApplet<STEREO>,
   FilterFolderApplet<STEREO>,
   WavPlayerApplet<STEREO>,
+  FreezeApplet<STEREO>,
   UpsampledApplet<STEREO>>
     stereo_processors_pool[NUM_SLOTS - 1];
 
