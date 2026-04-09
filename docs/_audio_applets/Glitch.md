@@ -48,17 +48,25 @@ Setting CLK to **TR1** with a tap-tempo cable overrides the internal clock entir
 > sequencer — will set the reference tempo.
 
 #### HLD — Hold / gate source
-**HLD** is a gate input that must be held high for the entire duration of the glitch.
-When the gate rises, the playhead locks to the most recently recorded slice. While the
-gate stays high, that slice loops continuously. When the gate drops, the effect returns
-immediately to live audio (the buffer never stopped recording, so there is no gap).
+**HLD** is a gate input. While it is HIGH, the playhead freezes at the most recently
+recorded slice and loops it. When the gate drops, the effect returns immediately to live
+audio (the buffer never stopped recording, so there is no gap).
+
+**Important: DIV and HLD are independent.** DIV controls only the *size* of the captured
+loop window — it does not control when the freeze starts or how long it lasts. The glitch
+is active for exactly as long as HLD is HIGH, no more.
+
+- **Short trigger pulse (≈ 1 ms)** → barely-audible micro-stutter, then immediately live.
+- **Sustained gate** → glitch holds for the duration of that gate.
+
+To freeze audio for exactly one clock division, the HLD gate must *stay HIGH* for that
+full duration. For example, to glitch every 3rd eighth note for one eighth note at 120 BPM
+(0.5 s/beat → eighth note = 250 ms): drive HLD with a gate that is HIGH for 250 ms and
+LOW for 500 ms, repeating every 750 ms. A clock multiplier/divider with adjustable gate
+length, an envelope generator in looping mode, or a gate sequencer can all do this.
 
 **AuxButton** latches and unlatches manual hold without a patched cable — useful for
 performance. The `Hld:` label inverts to indicate an active manual latch.
-
-> Short trigger pulses will produce very brief stutters. Long gates freeze audio for
-> as long as the gate is held — try an envelope follower, a slow LFO gate, or a
-> footswitch for hands-free control.
 
 #### MOD — Playback mode / MOD CV
 Selects how the frozen slice is looped:
