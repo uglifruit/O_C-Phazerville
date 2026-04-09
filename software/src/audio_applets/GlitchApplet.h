@@ -81,7 +81,7 @@ public:
         }
     }
 
-    void View() override {
+    FLASHMEM void View() override {
         if (!channels[0].glitch_stream.IsReady()) {
             gfxPrint(1, 15, "No PSRAM");
             return;
@@ -150,12 +150,12 @@ public:
     }
 
     // AuxButton latches/unlatches manual hold for performance without a patch.
-    void AuxButton() override {
+    FLASHMEM void AuxButton() override {
         manual_hold_ ^= 1;
         CancelEdit();
     }
 
-    void OnButtonPress() override {
+    FLASHMEM void OnButtonPress() override {
         if (CheckEditInputMapPress(
                 cursor,
                 IndexedInput(CLOCK_SRC,  clock_source),
@@ -167,7 +167,7 @@ public:
         CursorToggle();
     }
 
-    void OnEncoderMove(int direction) override {
+    FLASHMEM void OnEncoderMove(int direction) override {
         if (!EditMode()) {
             int next = cursor + direction;
             // Skip RATCHET/RATCHET_CV positions when not in MOD mode.
@@ -199,13 +199,13 @@ public:
     }
 
 #define GLITCH_PARAMS  pack<3>(div), pack<2>(mode), pack<3>(ratchet), mix
-    void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(GLITCH_PARAMS);
         data[1] = PackPackables(clock_source, hold_input, mix_cv);
         data[2] = PackPackables(mode_cv, ratchet_cv);
     }
 
-    void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], GLITCH_PARAMS);
         UnpackPackables(data[1], clock_source, hold_input, mix_cv);
         UnpackPackables(data[2], mode_cv, ratchet_cv);
@@ -216,7 +216,7 @@ public:
     AudioStream* OutputStream() override { return &output_stream; }
 
 protected:
-    void SetHelp() override {}
+    FLASHMEM void SetHelp() override {}
 
 private:
     static const uint8_t NUM_DIVS  = 8;

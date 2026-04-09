@@ -156,7 +156,7 @@ public:
 
         // --- Mixer gains for noise and passthrough ---
         output_mixer.gain(1, constrain(eff_noi * 0.01f, 0.f, 2.f));
-        output_mixer.gain(2, constrain(eff_mix * 0.01f, 0.f, 1.f));
+        output_mixer.gain(2, constrain((100.f - eff_mix) * 0.01f, 0.f, 1.f));
     }
 
     FLASHMEM void View() override {
@@ -296,7 +296,7 @@ private:
     int8_t  fmd_s    = 20;   // 1..100 (×10 = 10..1000 ms)
     int8_t  noi      = 20;   // 0..100 %
     int16_t ndc      = 80;   // 5..1000 ms
-    int8_t  mix      = 0;    // 0..100 %
+    int8_t  mix      = 100;  // 0..100 % (100 = drum only, 0 = full passthrough)
 
     DigitalInputMap trg;
     CVInputMap pitch_cv, dec_cv, swp_cv, rto_cv;
@@ -337,19 +337,18 @@ private:
         int8_t  fmd_s;
         int8_t  noi;
         int16_t ndc;
-        int8_t  mix;
         const char* name;
     };
 
     static const int NUM_PRESETS = 6;
     static constexpr FMDrumPreset PRESETS[NUM_PRESETS] = {
-        //        hz   dec  swp  rto  fmi  fmd noi  ndc  mix  name
-        {  60,   500,  80,  10,  90,  20,   5,  30,  0, "Kick"  },
-        { 160,    80,  15,  14,  70,   4,  90, 320,  0, "Snare" },
-        {1000,    60,   0,  35,  25,   3, 100, 100,  0, "HiHat" },
-        {1000,   350,   0,  35,  25,   8, 100, 750,  0, "O.Hat" },
-        { 120,   350,  60,  12,  70,  15,  15,  60,  0, "Tom"   },
-        { 300,    80,   5,   8,  40,   5,  90,  80,  0, "Clap"  },
+        //        hz   dec  swp  rto  fmi  fmd noi  ndc  name
+        {  60,   500,  80,  10,  90,  20,   5,  30, "Kick"  },
+        { 160,    80,  15,  14,  70,   4,  90, 320, "Snare" },
+        {1000,    60,   0,  35,  25,   3, 100, 100, "HiHat" },
+        {1000,   350,   0,  35,  25,   8, 100, 750, "O.Hat" },
+        { 120,   350,  60,  12,  70,  15,  15,  60, "Tom"   },
+        { 300,    80,   5,   8,  40,   5,  90,  80, "Clap"  },
     };
 
     FLASHMEM void LoadPreset(int idx) {
@@ -363,7 +362,6 @@ private:
             fmd_s    = p.fmd_s;
             noi      = p.noi;
             ndc      = p.ndc;
-            mix      = p.mix;
         } else {
             // Random
             pitch_hz = random(20, 800);
@@ -374,7 +372,6 @@ private:
             fmd_s    = random(2, 50);
             noi      = random(0, 80);
             ndc      = random(20, 300);
-            mix      = 0;
         }
     }
 
