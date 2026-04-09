@@ -23,6 +23,7 @@
 
 #include <Audio.h>
 #include "../dsputils.h"
+#include "../dsputils_arm.h"
 
 class AudioSynthAdvancedKarplus : public AudioStream {
 public:
@@ -106,34 +107,27 @@ public:
 
   // --- AudioStream update (runs in audio interrupt) ----------------------
 
-  void update() override {
-    if (!delay_line_) return;  // not yet acquired
+  // Tiny virtual stub — stays in ITCM (RAM1). All DSP work is in updateCore()
+  // which is non-virtual so FLASHMEM is honoured by the linker.
+  void update() override { if (delay_line_) updateCore(); }
 
+private:
+  // Non-virtual: FLASHMEM attribute is honoured, code lives in flash (XIP).
+  // Called exclusively from update() at the audio ISR rate; the instruction
+  // cache keeps it warm so flash latency is not a concern in practice.
+  FLASHMEM __attribute__((noinline)) void updateCore() {
     audio_block_t* out = allocate();
     if (!out) return;
 
     // --- Pitch-compensated loop gain (computed once per block) -----------
-    // Map decay param to target time: T = 0.002 * e^(d * ln3000)  [0.002 s…6 s]
-    // Min 0.001 s → RT60 ≈ 14 ms (very short staccato). Max 6 s → RT60 ≈ 41 s.
-    // fastexp from dsputils fastapprox library
+    // Map decay param to target time: T = 0.02 * e^(d * 8.699)  [0.02 s…6 s]
+    // ρ^L = exp(-L/(T_s*fs)) gives perceptual decay independent of pitch.
+    // fastexp (fastapprox) and fastexp replace expf to avoid libm dependency.
     float T_s = 0.02f * fastexp(decay_param_ * 8.699f);
-    // ρ = exp(-1 / (T_s * fs))  — apply once per sample.
-    // Over one period L the combined gain is ρ^L = exp(-L/(T_s*fs)), giving
-    // perceptual decay time ≈ T_s regardless of pitch (pitch-compensated).
-    // INCORRECT Do NOT include L in the exponent — that would apply a full period's
-    // INCORRECT attenuation on every sample, decaying the string L× too fast.
-    // INCORRECT - float loop_gain = expf(-1.0f / (T_s * AUDIO_SAMPLE_RATE_EXACT));
-    float loop_gain = expf(-target_delay_ / (T_s * AUDIO_SAMPLE_RATE_EXACT));
-    // Hard cap: system must stay stable regardless of parameter extremes.
-    // Max legitimate gain at T_s=6 s is exp(-1/(6*44100)) ≈ 0.9999985 — keep
-    // cap above that so the full decay range is usable.
+    float loop_gain = fastexp(-target_delay_ / (T_s * AUDIO_SAMPLE_RATE_EXACT));
     if (loop_gain > 0.9999990f) loop_gain = 0.9999990f;
 
     // --- Handle pending trigger (sets up progressive excitation) ----------
-    // Instead of filling the delay line in one burst (memset + for-loop),
-    // excitation samples are generated one-per-sample inside the main loop
-    // below. This amortizes the sinf() cost across multiple audio blocks and
-    // eliminates the need for a memset entirely.
     if (trigger_pending_) {
       trigger_pending_ = false;
       int n = static_cast<int>(target_delay_);
@@ -143,45 +137,29 @@ public:
       excite_phase_     = 0.0f;
       excite_phase_inc_ = KS_TWO_PI / static_cast<float>(n);
       excite_scale_     = trigger_velocity_ * 32767.0f;
-      // Reset IIR state so stale delay-line data cannot poison the filter
-      // during the excitation phase (read head still sees old audio for the
-      // first period before freshly written samples come back around).
       iir_state_ = 0.0f;
     }
 
     // --- Per-sample KS feedback loop -------------------------------------
     for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
 
-      // Fractional read position: L samples behind the write head
       float read_pos = static_cast<float>(write_idx_) - target_delay_;
       if (read_pos < 0.0f) read_pos += static_cast<float>(BUFFER_SIZE);
 
-      // Extract fractional part from the UNMASKED floor of read_pos.
-      // After the negative-wrap guard, read_pos can be up to ~8190 (when
-      // write_idx_ is near 4095 and target_delay_ is near BUFFER_SIZE).
-      // r0_raw may therefore exceed BUFFER_MASK. frac MUST be computed from
-      // r0_raw; using (r0_raw & BUFFER_MASK) instead would give frac ≈ 4096
-      // and corrupt the interpolation.
       uint32_t r0_raw = static_cast<uint32_t>(read_pos);
       float    frac   = read_pos - static_cast<float>(r0_raw);
       uint32_t r0     = r0_raw & BUFFER_MASK;
       uint32_t r1     = (r0 + 1) & BUFFER_MASK;
 
-      // Linear interpolation for sub-sample accuracy (resolves pitch quantization)
       float raw = delay_line_[r0] + frac * (delay_line_[r1] - delay_line_[r0]);
 
       float new_sample;
 
       if (excite_remaining_ > 0) {
-        // Excitation phase: generate one noise/sine sample and write it
-        // directly into the delay line, bypassing feedback. This naturally
-        // overwrites stale data as the write head advances. The IIR is warmed
-        // up from the excitation signal (not from stale delay-line reads) so
-        // the filter state is correct when sustain begins.
         noise_seed_ = noise_seed_ * 1664525u + 1013904223u;
         float noise = static_cast<float>(static_cast<int32_t>(noise_seed_))
                       * (1.0f / 2147483648.0f);
-        float sine  = sinf(excite_phase_);
+        float sine  = arm_sin_f32(excite_phase_);
         float excite = ((1.0f - body_param_) * noise + body_param_ * sine)
                        * excite_scale_;
         if (excite >  32767.0f) excite =  32767.0f;
@@ -192,15 +170,11 @@ public:
         excite_phase_ += excite_phase_inc_;
         excite_remaining_--;
       } else {
-        // Sustain phase: normal KS feedback (1st-order IIR + loop gain)
         float filtered = iir_alpha_ * raw + (1.0f - iir_alpha_) * iir_state_;
         iir_state_     = filtered;
         new_sample     = filtered * loop_gain;
       }
 
-      // Write back: delay line values live in q15 float units (±32767).
-      // Keep write_idx_ masked (0–4095) so float(write_idx_) stays within
-      // float32's exact integer range; avoids precision loss after ~6 min.
       delay_line_[write_idx_] = new_sample;
       write_idx_ = (write_idx_ + 1) & BUFFER_MASK;
 
@@ -211,7 +185,6 @@ public:
     release(out);
   }
 
-private:
   static constexpr float KS_TWO_PI = 6.28318530718f;
 
   // --- Delay line ---------------------------------------------------------

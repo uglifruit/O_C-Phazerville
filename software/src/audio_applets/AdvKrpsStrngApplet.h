@@ -32,7 +32,7 @@ public:
 
   // --- Lifecycle ----------------------------------------------------------
 
-  FLASHMEM void Start() override {
+  void Start() override {
     synth.Acquire();
     adc_lag_ = -1;
 
@@ -43,14 +43,14 @@ public:
     output_mixer.gain(1, mix * 0.01f);
   }
 
-  FLASHMEM void Unload() override {
+  void Unload() override {
     synth.Release();
     AllowRestart();
   }
 
   // --- Controller (runs at OC ISR rate, ~16 kHz) -------------------------
 
-  FLASHMEM void Controller() override {
+  void Controller() override {
     // Pitch: base + V/Oct CV
     float freq = PitchToRatio(pitch + pitch_cv.In()) * C3;
     synth.setFrequency(freq);
@@ -81,7 +81,7 @@ public:
 
   // --- View (64×64 display) ----------------------------------------------
 
-  FLASHMEM void View() override {
+  void View() override {
     // Row 1 — Pitch (two editable cursors + CV source)
     gfxStartCursor(1, 15);
     gfxPrintTuningIndicator(pitch);          // note name + tuning bar
@@ -144,7 +144,7 @@ public:
 
   // --- Button / encoder --------------------------------------------------
 
-  FLASHMEM void OnButtonPress() override {
+  void OnButtonPress() override {
     if (CheckEditInputMapPress(
           cursor,
           IndexedInput(PITCH_CV, pitch_cv),
@@ -158,7 +158,7 @@ public:
     CursorToggle();
   }
 
-  FLASHMEM void OnEncoderMove(int direction) override {
+  void OnEncoderMove(int direction) override {
     if (!EditMode()) {
       MoveCursor(cursor, direction, MIX_CV);
       return;
@@ -216,13 +216,13 @@ public:
 
 #define ADVKS_PARAMS pitch, decay, brightness, body, mix
 
-  FLASHMEM void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
+  void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
     data[0] = PackPackables(ADVKS_PARAMS);
     data[1] = PackPackables(pitch_cv, trig_cv, decay_cv, brightness_cv);
     data[2] = PackPackables(body_cv, mix_cv);
   }
 
-  FLASHMEM void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
+  void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
     UnpackPackables(data[0], ADVKS_PARAMS);
     UnpackPackables(data[1], pitch_cv, trig_cv, decay_cv, brightness_cv);
     UnpackPackables(data[2], body_cv, mix_cv);
@@ -236,7 +236,7 @@ public:
   AudioStream* OutputStream() override { return &output_mixer;   }
 
 protected:
-  FLASHMEM void SetHelp() override {}
+  void SetHelp() override {}
 
 private:
   // Cursor positions — order matches display top-to-bottom
