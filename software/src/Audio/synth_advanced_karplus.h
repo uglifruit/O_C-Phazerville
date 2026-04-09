@@ -23,7 +23,6 @@
 
 #include <Audio.h>
 #include "../dsputils.h"
-#include "../dsputils_arm.h"
 
 class AudioSynthAdvancedKarplus : public AudioStream {
 public:
