@@ -20,6 +20,7 @@
 #include "audio_applets/PhaserApplet.h"
 #include "audio_applets/ThreeBandz.h"
 #include "audio_applets/MistApplet.h"
+#include "audio_applets/AdvKrpsStrngApplet.h"
 
 const size_t NUM_SLOTS = 5;
 
@@ -32,7 +33,8 @@ DMAMEM std::tuple<
   HandSawApplet,
   UpsampledApplet<MONO>,
   OscApplet,
-  WavPlayerApplet<MONO>>
+  WavPlayerApplet<MONO>,
+  AdvKrpsStrngApplet>
     mono_input_pool[2];
 DMAMEM std::tuple<
   InputApplet<STEREO>,
@@ -55,7 +57,8 @@ DMAMEM std::tuple<
   BungverbApplet,
   DynamicsApplet<MONO>,
   UpsampledApplet<MONO>,
-  MistApplet<MONO>>
+  MistApplet<MONO>,
+  AdvKrpsStrngApplet>
     mono_processors_pool[2][NUM_SLOTS - 1];
 DMAMEM std::tuple<
   PassthruApplet<STEREO>,
