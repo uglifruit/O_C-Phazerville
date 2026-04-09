@@ -2,9 +2,9 @@
 
 #include "AudioBuffer.h"
 #include "../dsputils.h"
+#include "../dsputils_arm.h"
 #include "../extern/stmlib_utils_random.h"
 #include <Audio.h>
-#include <math.h>
 
 // Thin subclass of ExtAudioBuffer exposing write position and raw buffer
 // access needed by AudioEffectMist for absolute-position grain reads.
@@ -66,12 +66,12 @@ public:
         if (!out) { if (in) release(in); return; }
 
         // Snapshot volatile params once for this block.
-        const float   cur_pos     = pos_;
-        const float   cur_density = density_;
-        const float   cur_size    = size_;
-        const float   cur_spray   = spray_;
-        const float   cur_pitch   = pitch_;
-        const float   cur_psprd   = psprd_;
+        const float      cur_pos     = pos_;
+        const float      cur_density = density_;
+        const float      cur_size    = size_;
+        const float      cur_spray   = spray_;
+        const float      cur_pitch   = pitch_;
+        const float      cur_psprd   = psprd_;
         const bool       cur_freeze  = freeze_;
         const GrainShape cur_shape   = shape_;
         const size_t     buf_size    = g_buffer.NumSamples;
@@ -98,71 +98,142 @@ public:
 
         int16_t* buf = g_buffer.RawBuffer();
 
-        // Process each sample in the block.
+        // ── Pass 1: grain scheduling ───────────────────────────────────────────
+        // Keeps sample-accurate spawn timing in its own loop, separate from
+        // grain processing. Newly spawned grains are picked up in Pass 2 below.
         for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
-
-            // ── Grain scheduling ───────────────────────────────────────────
-            // Phase accumulator advances by density/AUDIO_SAMPLE_RATE per sample.
             spawn_phase_ += safe_density / AUDIO_SAMPLE_RATE_EXACT;
             if (spawn_phase_ >= 1.0f) {
                 spawn_phase_ -= 1.0f;
                 spawnGrain(cur_pos, cur_size, cur_spray, cur_pitch, cur_psprd, cur_shape, buf_size);
             }
+        }
 
-            // ── Sum active grains ──────────────────────────────────────────
-            float accum = 0.0f;
-            for (auto& g : grains) {
-                if (!g.active) continue;
+        // ── Pass 2: grain processing (grain-outer, sample-inner) ───────────────
+        // Shape is constant per grain — the switch is hoisted outside the sample
+        // loop, eliminating 128 × MAX_GRAINS redundant branch evaluations per block.
+        // inv_grain_len (precomputed at spawn) replaces the per-sample division.
+        // arm_sin_f32 replaces sinf; Hermite reads use bounds checks, not modulo.
+        float accum_buf[AUDIO_BLOCK_SAMPLES] = {};
 
-                float t = (float)g.phase / (float)(g.grain_len - 1);
-                float w;
-                switch (g.shape) {
-                    case SHAPE_TRIANGLE:
-                        w = (t < 0.5f) ? (2.0f * t) : (2.0f - 2.0f * t); break;
-                    case SHAPE_RAMP_UP: {
-                        size_t fl = g.grain_len >> 3;
-                        if (fl > 220) fl = 220;
-                        float tail = (g.phase >= g.grain_len - fl)
-                            ? (float)(g.grain_len - g.phase) / (float)fl : 1.0f;
-                        w = t * tail;
-                        break;
+        for (auto& g : grains) {
+            if (!g.active) continue;
+
+            switch (g.shape) {
+
+                case SHAPE_HANN: {
+                    // w = sin²(π × t). Precompute running angle to remove the
+                    // π×t multiply from the inner loop — just add angle_step each sample.
+                    const float angle_step = 3.14159265358979f * g.inv_grain_len;
+                    float angle = 3.14159265358979f * (float)g.phase * g.inv_grain_len;
+                    for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
+                        float s = arm_sin_f32(angle);
+                        float w = s * s;
+                        angle += angle_step;
+
+                        size_t idx  = (size_t)g.read_ptr;
+                        float  frac = g.read_ptr - (float)idx;
+                        size_t im1 = (idx == 0)            ? buf_size - 1      : idx - 1;
+                        size_t i1  = (idx + 1 >= buf_size) ? 0                 : idx + 1;
+                        size_t i2  = (idx + 2 >= buf_size) ? idx + 2 - buf_size : idx + 2;
+                        accum_buf[i] += InterpHermite((float)buf[im1], (float)buf[idx],
+                                                       (float)buf[i1],  (float)buf[i2], frac) * w;
+
+                        g.read_ptr += g.pitch;
+                        if (g.read_ptr >= (float)buf_size) g.read_ptr -= (float)buf_size;
+                        if (g.read_ptr < 0.0f)             g.read_ptr += (float)buf_size;
+                        if (++g.phase >= g.grain_len) { g.active = false; break; }
                     }
-                    case SHAPE_RAMP_DOWN: {
-                        size_t fl = g.grain_len >> 3;
-                        if (fl > 220) fl = 220;
-                        float head = (g.phase < fl)
-                            ? (float)g.phase / (float)fl : 1.0f;
-                        w = (1.0f - t) * head;
-                        break;
-                    }
-                    default: { // SHAPE_HANN: sin²(π × t)
-                        float s = sinf(3.14159265358979f * t);
-                        w = s * s;
-                    } break;
+                    break;
                 }
 
-                // Hermite-interpolated read at g.read_ptr.
-                size_t idx  = (size_t)g.read_ptr;
-                float  frac = g.read_ptr - (float)idx;
-                // Four surrounding points (with wrap).
-                float s0 = (float)buf[(idx + buf_size - 1) % buf_size];
-                float s1 = (float)buf[idx % buf_size];
-                float s2 = (float)buf[(idx + 1) % buf_size];
-                float s3 = (float)buf[(idx + 2) % buf_size];
-                accum += InterpHermite(s0, s1, s2, s3, frac) * w;
+                case SHAPE_TRIANGLE: {
+                    float t = (float)g.phase * g.inv_grain_len;
+                    const float t_step = g.inv_grain_len;
+                    for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
+                        float w = (t < 0.5f) ? (2.0f * t) : (2.0f - 2.0f * t);
+                        t += t_step;
 
-                // Advance grain read pointer by pitch ratio; wrap in-place.
-                g.read_ptr += g.pitch;
-                if (g.read_ptr >= (float)buf_size) g.read_ptr -= (float)buf_size;
-                if (g.read_ptr < 0.0f)             g.read_ptr += (float)buf_size;
+                        size_t idx  = (size_t)g.read_ptr;
+                        float  frac = g.read_ptr - (float)idx;
+                        size_t im1 = (idx == 0)            ? buf_size - 1      : idx - 1;
+                        size_t i1  = (idx + 1 >= buf_size) ? 0                 : idx + 1;
+                        size_t i2  = (idx + 2 >= buf_size) ? idx + 2 - buf_size : idx + 2;
+                        accum_buf[i] += InterpHermite((float)buf[im1], (float)buf[idx],
+                                                       (float)buf[i1],  (float)buf[i2], frac) * w;
 
-                g.phase++;
-                if (g.phase >= g.grain_len) g.active = false;
+                        g.read_ptr += g.pitch;
+                        if (g.read_ptr >= (float)buf_size) g.read_ptr -= (float)buf_size;
+                        if (g.read_ptr < 0.0f)             g.read_ptr += (float)buf_size;
+                        if (++g.phase >= g.grain_len) { g.active = false; break; }
+                    }
+                    break;
+                }
+
+                case SHAPE_RAMP_UP: {
+                    // Ramp up with a short fade-out at the tail to prevent clicks.
+                    size_t fl = g.grain_len >> 3;
+                    if (fl > 220) fl = 220;
+                    const float inv_fl = 1.0f / (float)fl;
+                    const size_t tail_start = g.grain_len - fl;
+                    float t = (float)g.phase * g.inv_grain_len;
+                    const float t_step = g.inv_grain_len;
+                    for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
+                        float tail = (g.phase >= tail_start)
+                            ? (float)(g.grain_len - g.phase) * inv_fl : 1.0f;
+                        float w = t * tail;
+                        t += t_step;
+
+                        size_t idx  = (size_t)g.read_ptr;
+                        float  frac = g.read_ptr - (float)idx;
+                        size_t im1 = (idx == 0)            ? buf_size - 1      : idx - 1;
+                        size_t i1  = (idx + 1 >= buf_size) ? 0                 : idx + 1;
+                        size_t i2  = (idx + 2 >= buf_size) ? idx + 2 - buf_size : idx + 2;
+                        accum_buf[i] += InterpHermite((float)buf[im1], (float)buf[idx],
+                                                       (float)buf[i1],  (float)buf[i2], frac) * w;
+
+                        g.read_ptr += g.pitch;
+                        if (g.read_ptr >= (float)buf_size) g.read_ptr -= (float)buf_size;
+                        if (g.read_ptr < 0.0f)             g.read_ptr += (float)buf_size;
+                        if (++g.phase >= g.grain_len) { g.active = false; break; }
+                    }
+                    break;
+                }
+
+                case SHAPE_RAMP_DOWN: {
+                    // Ramp down with a short fade-in at the head to prevent clicks.
+                    size_t fl = g.grain_len >> 3;
+                    if (fl > 220) fl = 220;
+                    const float inv_fl = 1.0f / (float)fl;
+                    float t = (float)g.phase * g.inv_grain_len;
+                    const float t_step = g.inv_grain_len;
+                    for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
+                        float head = (g.phase < fl)
+                            ? (float)g.phase * inv_fl : 1.0f;
+                        float w = (1.0f - t) * head;
+                        t += t_step;
+
+                        size_t idx  = (size_t)g.read_ptr;
+                        float  frac = g.read_ptr - (float)idx;
+                        size_t im1 = (idx == 0)            ? buf_size - 1      : idx - 1;
+                        size_t i1  = (idx + 1 >= buf_size) ? 0                 : idx + 1;
+                        size_t i2  = (idx + 2 >= buf_size) ? idx + 2 - buf_size : idx + 2;
+                        accum_buf[i] += InterpHermite((float)buf[im1], (float)buf[idx],
+                                                       (float)buf[i1],  (float)buf[i2], frac) * w;
+
+                        g.read_ptr += g.pitch;
+                        if (g.read_ptr >= (float)buf_size) g.read_ptr -= (float)buf_size;
+                        if (g.read_ptr < 0.0f)             g.read_ptr += (float)buf_size;
+                        if (++g.phase >= g.grain_len) { g.active = false; break; }
+                    }
+                    break;
+                }
             }
+        }
 
-            // Scale by equal-power coefficient for MAX_GRAINS simultaneous sources.
-            // EQUAL_POWER_EQUAL_MIX has entries up to index 8; clamp to that.
-            out->data[i] = Clip16(accum * GRAIN_SCALE);
+        // ── Pass 3: scale and clip to output ──────────────────────────────────
+        for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
+            out->data[i] = Clip16(accum_buf[i] * GRAIN_SCALE);
         }
 
         transmit(out, 0);
@@ -177,12 +248,13 @@ private:
     static constexpr float GRAIN_SCALE = 0.25f;
 
     struct Grain {
-        bool       active    = false;
-        float      read_ptr  = 0.0f;  // fractional buffer index
-        float      pitch     = 1.0f;  // playback ratio
-        size_t     grain_len = 0;     // duration in samples
-        size_t     phase     = 0;     // position within grain
-        GrainShape shape     = SHAPE_HANN;
+        bool       active        = false;
+        float      read_ptr      = 0.0f;  // fractional buffer index
+        float      pitch         = 1.0f;  // playback ratio
+        size_t     grain_len     = 0;     // duration in samples
+        size_t     phase         = 0;     // position within grain
+        float      inv_grain_len = 0.0f;  // 1.0f / (grain_len - 1), precomputed at spawn
+        GrainShape shape         = SHAPE_HANN;
     } grains[MAX_GRAINS];
 
     MistCircBuffer<int16_t> g_buffer;
@@ -231,14 +303,15 @@ private:
         float grain_pitch = cur_pitch;
         if (cur_psprd > 0.0f) {
             float rand_semis = cur_psprd * (stmlib::Random::GetFloat() * 2.0f - 1.0f);
-            grain_pitch *= powf(2.0f, rand_semis / 12.0f);
+            grain_pitch *= SemitonesToRatio(rand_semis);
         }
 
-        g->read_ptr  = rptr;
-        g->pitch     = grain_pitch;
-        g->grain_len = glen;
-        g->phase     = 0;
-        g->shape     = cur_shape;
-        g->active    = true;
+        g->read_ptr      = rptr;
+        g->pitch         = grain_pitch;
+        g->grain_len     = glen;
+        g->phase         = 0;
+        g->inv_grain_len = 1.0f / (float)(glen - 1);
+        g->shape         = cur_shape;
+        g->active        = true;
     }
 };
