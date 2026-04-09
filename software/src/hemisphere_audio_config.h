@@ -46,6 +46,7 @@ DMAMEM std::tuple<
   InputApplet<MONO>,
   OscApplet,
   HandSawApplet,
+  FMDrumApplet,
   WavPlayerApplet<MONO>,
   VcaApplet<MONO>,
   LadderApplet<MONO>,

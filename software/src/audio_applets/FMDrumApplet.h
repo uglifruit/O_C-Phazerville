@@ -159,7 +159,7 @@ public:
         output_mixer.gain(2, constrain(eff_mix * 0.01f, 0.f, 1.f));
     }
 
-    void View() override {
+    FLASHMEM void View() override {
         // Header
         gfxPrint(1, 2, "FMDrum");
         if (trigger_flash)
@@ -181,7 +181,7 @@ public:
         gfxDisplayInputMapEditor();
     }
 
-    void OnEncoderMove(int direction) override {
+    FLASHMEM void OnEncoderMove(int direction) override {
         if (!EditMode()) {
             MoveCursor(cursor, direction, NUM_CURSORS - 1);
             // Scroll to keep active row visible
@@ -226,9 +226,9 @@ public:
         }
     }
 
-    void OnButtonPress() override {
-        if (cursor == TRG) { CursorToggle(); return; }
+    FLASHMEM void OnButtonPress() override {
         if (CheckEditInputMapPress(cursor,
+              IndexedInput(TRG,    trg),
               IndexedInput(CV_PIT, pitch_cv),
               IndexedInput(CV_DCY, dec_cv),
               IndexedInput(CV_SWP, swp_cv),
@@ -242,19 +242,19 @@ public:
         CursorToggle();
     }
 
-    void AuxButton() override {
+    FLASHMEM void AuxButton() override {
         preset_idx = (preset_idx + 1) % (NUM_PRESETS + 1);
         LoadPreset(preset_idx);
     }
 
-    void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(pitch_hz, dec, swp, rto, fmi, fmd_s);
         data[1] = PackPackables(noi, ndc, mix, trg, mix_cv);
         data[2] = PackPackables(pitch_cv, dec_cv, swp_cv, rto_cv);
         data[3] = PackPackables(fmi_cv, fmd_cv, noi_cv, ndc_cv);
     }
 
-    void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], pitch_hz, dec, swp, rto, fmi, fmd_s);
         UnpackPackables(data[1], noi, ndc, mix, trg, mix_cv);
         UnpackPackables(data[2], pitch_cv, dec_cv, swp_cv, rto_cv);
@@ -262,7 +262,7 @@ public:
     }
 
 protected:
-    void SetHelp() override {}
+    FLASHMEM void SetHelp() override {}
 
 private:
     enum Cursor : int8_t {
@@ -352,7 +352,7 @@ private:
         { 300,    80,   5,   8,  40,   5,  90,  80,  0, "Clap"  },
     };
 
-    void LoadPreset(int idx) {
+    FLASHMEM void LoadPreset(int idx) {
         if (idx < NUM_PRESETS) {
             const auto& p = PRESETS[idx];
             pitch_hz = p.pitch_hz;
@@ -380,13 +380,13 @@ private:
 
     // DrawRow renders a display row (by row index 0..NUM_ROWS-1).
     // Each param row shows value cursor then CV source cursor inline.
-    void DrawRow(int row, int y) {
+    FLASHMEM void DrawRow(int row, int y) {
         switch (row) {
             case 0: // TRG
                 gfxPrint(1, y, "TRG:");
                 gfxStartCursor(25, y);
                 gfxPrint(trg);
-                gfxEndCursor(cursor == TRG, false, trg.InputName());
+                gfxEndCursor(cursor == TRG, true, trg.InputName());
                 break;
             case 1: // PRESET
                 gfxPrint(1, y, "Type:");

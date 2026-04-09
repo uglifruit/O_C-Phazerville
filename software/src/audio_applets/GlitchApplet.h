@@ -102,7 +102,7 @@ public:
         if (manual_hold_) gfxInvert(1, 25, 24, 8); // indicate latched hold
         gfxStartCursor();
         gfxPrint(hold_input);
-        gfxEndCursor(cursor == HOLD_SRC, true, hold_input.InputName()); // spicy: AuxButton triggers hold
+        gfxEndCursor(cursor == HOLD_SRC, false, hold_input.InputName());
 
         // ── Line 3 (y=35): Playback mode + CV ────────────────────────────
         gfxPrint(1, 35, "Mod:");
@@ -159,7 +159,6 @@ public:
         if (CheckEditInputMapPress(
                 cursor,
                 IndexedInput(CLOCK_SRC,  clock_source),
-                IndexedInput(HOLD_SRC,   hold_input),
                 IndexedInput(MODE_CV,    mode_cv),
                 IndexedInput(RATCHET_CV, ratchet_cv),
                 IndexedInput(MIX_CV,     mix_cv)
@@ -220,15 +219,15 @@ protected:
     void SetHelp() override {}
 
 private:
-    static const uint8_t NUM_DIVS  = 6;
+    static const uint8_t NUM_DIVS  = 8;
     static const uint8_t NUM_MODES = 4;
     static const uint8_t MODE_RATCHET = AudioEffectGlitch::MODE_RATCHET;
 
     static constexpr const char* DIV_NAMES[] = {
-        "1/2", "1/4", "1/8", "1/16", "1/32", "1/64"
+        "1/2", "1/3", "1/4", "1/6", "1/8", "1/16", "1/32", "1/64"
     };
     static constexpr float DIV_BEATS[] = {
-        2.0f, 1.0f, 0.5f, 0.25f, 0.125f, 0.0625f
+        2.0f, 4.0f/3.0f, 1.0f, 2.0f/3.0f, 0.5f, 0.25f, 0.125f, 0.0625f
     };
     static constexpr const char* MODE_NAMES[] = { "FWD", "REV", "PNG", "RAT" };
 
@@ -249,7 +248,7 @@ private:
 
     // Parameters
     DigitalInputMap clock_source;
-    uint8_t  div     = 3;   // default 1/16
+    uint8_t  div     = 5;   // default 1/16
     DigitalInputMap hold_input;
     uint8_t  mode    = 0;   // 0=FWD, 1=REV, 2=PING, 3=MOD
     CVInputMap mode_cv;
