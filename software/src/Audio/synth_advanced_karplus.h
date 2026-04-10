@@ -43,66 +43,37 @@ public:
   // Allocate the delay line from internal heap (DTCM/OCRAM).
   // 16 KB in internal RAM avoids the QSPI stall that PSRAM causes
   // when memset fires inside the audio ISR. Called from applet Start().
-  void Acquire() {
-    if (delay_line_) return;
-    delay_line_ = static_cast<float*>(calloc(BUFFER_SIZE, sizeof(float)));
-    if (delay_line_) {
-      write_idx_        = 0;
-      iir_state_        = 0.0f;
-      trigger_pending_  = false;
-      excite_remaining_ = 0;
-    }
-  }
-
-  void Release() {
-    if (!delay_line_) return;
-    free(delay_line_);
-    delay_line_ = nullptr;
-  }
+  __attribute__((noinline)) void Acquire();
+  __attribute__((noinline)) void Release();
 
   // --- Parameter setters (call every Controller() tick) -----------------
 
   // Target fundamental frequency in Hz.
-  void setFrequency(float hz) {
-    target_hz_ = constrain(hz, MIN_HZ, MAX_HZ);
-    recalculateDelay();
-  }
+  __attribute__((noinline)) void setFrequency(float hz);
 
   // Decay: 0.0 (shortest) → 1.0 (longest).
   // Internally maps to a target decay time on a log scale (0.05 s → 15 s).
   // The loop gain ρ is then pitch-compensated so that perceptual decay time
   // is independent of pitch (high notes decay as slowly as low notes).
-  void setDecay(float d) {
-    decay_param_ = constrain(d, 0.0f, 1.0f);
-  }
+  __attribute__((noinline)) void setDecay(float d);
 
   // Brightness: 0.0 (dark, heavy LPF) → 1.0 (bright, minimal LPF).
   // Controls α in the 1st-order IIR feedback filter:
   //   y[n] = α * x[n] + (1 - α) * y[n-1]
   // Large α passes high frequencies (bright); small α smooths heavily (dark).
-  void setBrightness(float b) {
-    brightness_param_ = constrain(b, 0.0f, 1.0f);
-    // Map: 0 → α = 0.05 (very dark), 1 → α = 1.0 (full bright / no filter)
-    iir_alpha_ = 0.05f + brightness_param_ * 0.95f;
-    recalculateDelay();
-  }
+  __attribute__((noinline)) void setBrightness(float b);
 
   // Body: 0.0 (flat noise excitation) → 1.0 (narrow resonant bandpass).
   // Controls the Q of a biquad bandpass applied to the noise burst on noteOn.
   // Higher values simulate an acoustic body cavity that emphasises the
   // fundamental before the string recirculates the excitation.
-  void setBody(float body) {
-    body_param_ = constrain(body, 0.0f, 1.0f);
-  }
+  __attribute__((noinline)) void setBody(float body);
 
   // --- Trigger -----------------------------------------------------------
 
   // Fire the string. velocity: 0.0 = silent, 1.0 = full amplitude.
   // Safe to call from Controller() (flag read inside audio interrupt update()).
-  void noteOn(float velocity = 1.0f) {
-    trigger_velocity_  = constrain(velocity, 0.0f, 1.0f);
-    trigger_pending_   = true;
-  }
+  __attribute__((noinline)) void noteOn(float velocity = 1.0f);
 
   // --- AudioStream update (runs in audio interrupt) ----------------------
 
@@ -152,10 +123,5 @@ private:
   // the feedback loop. Subtracting it here keeps pitch accurate across the
   // full brightness range. Must be called whenever target_hz_ or iir_alpha_
   // changes (i.e. from setFrequency() and setBrightness()).
-  void recalculateDelay() {
-    float filter_delay = (1.0f - iir_alpha_) / iir_alpha_;
-    float d = AUDIO_SAMPLE_RATE_EXACT / target_hz_ - filter_delay;
-    if (d < 2.0f) d = 2.0f;
-    target_delay_ = (d < BUFFER_SIZE - 2) ? d : BUFFER_SIZE - 2;
-  }
+  __attribute__((noinline)) void recalculateDelay();
 };

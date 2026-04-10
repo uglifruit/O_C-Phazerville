@@ -1,4 +1,4 @@
-// Definition of AudioSynthAdvancedKarplus::updateCore().
+// Out-of-line definitions for AudioSynthAdvancedKarplus.
 //
 // Kept in a .cpp file so that FLASHMEM is honoured by the linker. Inline
 // class-member definitions in headers end up in COMDAT (.gnu.linkonce)
@@ -6,6 +6,64 @@
 // definitions in a translation unit do not have this problem.
 
 #include "synth_advanced_karplus.h"
+
+// --- Lifecycle -----------------------------------------------------------
+
+FLASHMEM void AudioSynthAdvancedKarplus::Acquire() {
+    if (delay_line_) return;
+    delay_line_ = static_cast<float*>(calloc(BUFFER_SIZE, sizeof(float)));
+    if (delay_line_) {
+        write_idx_        = 0;
+        iir_state_        = 0.0f;
+        trigger_pending_  = false;
+        excite_remaining_ = 0;
+    }
+}
+
+FLASHMEM void AudioSynthAdvancedKarplus::Release() {
+    if (!delay_line_) return;
+    free(delay_line_);
+    delay_line_ = nullptr;
+}
+
+// --- Parameter setters ---------------------------------------------------
+
+FLASHMEM void AudioSynthAdvancedKarplus::setFrequency(float hz) {
+    target_hz_ = constrain(hz, MIN_HZ, MAX_HZ);
+    recalculateDelay();
+}
+
+FLASHMEM void AudioSynthAdvancedKarplus::setDecay(float d) {
+    decay_param_ = constrain(d, 0.0f, 1.0f);
+}
+
+FLASHMEM void AudioSynthAdvancedKarplus::setBrightness(float b) {
+    brightness_param_ = constrain(b, 0.0f, 1.0f);
+    iir_alpha_ = 0.05f + brightness_param_ * 0.95f;
+    recalculateDelay();
+}
+
+FLASHMEM void AudioSynthAdvancedKarplus::setBody(float body) {
+    body_param_ = constrain(body, 0.0f, 1.0f);
+}
+
+// --- Trigger -------------------------------------------------------------
+
+FLASHMEM void AudioSynthAdvancedKarplus::noteOn(float velocity) {
+    trigger_velocity_ = constrain(velocity, 0.0f, 1.0f);
+    trigger_pending_  = true;
+}
+
+// --- Private helper ------------------------------------------------------
+
+FLASHMEM void AudioSynthAdvancedKarplus::recalculateDelay() {
+    float filter_delay = (1.0f - iir_alpha_) / iir_alpha_;
+    float d = AUDIO_SAMPLE_RATE_EXACT / target_hz_ - filter_delay;
+    if (d < 2.0f) d = 2.0f;
+    target_delay_ = (d < BUFFER_SIZE - 2) ? d : BUFFER_SIZE - 2;
+}
+
+// --- Audio DSP (hot path) ------------------------------------------------
 
 FLASHMEM __attribute__((noinline)) void AudioSynthAdvancedKarplus::updateCore() {
     audio_block_t* out = allocate();
