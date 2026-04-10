@@ -11,7 +11,7 @@ public:
     AudioStream* InputStream()  override { return &input_stream; }
     AudioStream* OutputStream() override { return &output_mixer; }
 
-    void Start() override {
+    FLASHMEM void Start() override {
         // Acquire interpolating streams
         fm_idx_stream.Acquire();
         fm_idx_stream.Method(INTERPOLATION_LINEAR);
@@ -80,7 +80,7 @@ public:
         noise_env_stream.Push(float_to_q15(0.0f));
     }
 
-    void Unload() override {
+    FLASHMEM void Unload() override {
         fm_idx_stream.Release();
         amp_env_stream.Release();
         noise_env_stream.Release();
@@ -160,8 +160,6 @@ public:
     }
 
     FLASHMEM void View() override {
-        // Header
-        gfxPrint(1, 2, "FMDrum");
         if (trigger_flash)
             gfxIcon(56, 2, ZAP_ICON);
 
@@ -205,13 +203,13 @@ public:
                 LoadPreset(preset_idx);
                 break;
             case PIT:    pitch_hz = constrain(pitch_hz + direction * 5, 10, 2000); break;
-            case DCY:    dec      = constrain(dec + direction * 5, 10, 2000); break;
+            case DCY:    dec      = constrain(dec + direction * 5, 10, 4000); break;
             case SWP:    swp      = constrain(swp + direction, 0, 100); break;
             case RTO:    rto      = constrain(rto + direction, 1, 100); break;
             case FMI:    fmi      = constrain(fmi + direction, 0, 100); break;
             case FMD:    fmd_s    = constrain(fmd_s + direction, 1, 100); break;
             case NOI:    noi      = constrain(noi + direction, 0, 100); break;
-            case NDC:    ndc      = constrain(ndc + direction * 5, 5, 1000); break;
+            case NDC:    ndc      = constrain(ndc + direction * 5, 5, 2000); break;
             case MIX:    mix      = constrain(mix + direction, 0, 100); break;
             case CV_PIT: pitch_cv.ChangeSource(direction); break;
             case CV_DCY: dec_cv.ChangeSource(direction);   break;
@@ -340,7 +338,7 @@ private:
         const char* name;
     };
 
-    static const int NUM_PRESETS = 6;
+    static const int NUM_PRESETS = 8;
     static constexpr FMDrumPreset PRESETS[NUM_PRESETS] = {
         //        hz   dec  swp  rto  fmi  fmd noi  ndc  name
         {  60,   500,  80,  10,  90,  20,   5,  30, "Kick"  },
@@ -349,6 +347,8 @@ private:
         {1000,   350,   0,  35,  25,   8, 100, 750, "O.Hat" },
         { 120,   350,  60,  12,  70,  15,  15,  60, "Tom"   },
         { 300,    80,   5,   8,  40,   5,  90,  80, "Clap"  },
+        { 500,   100,   0,  37,  90,   8,  10,  80, "Metal" },
+        { 562,   300,   0,  50,  80,  10,   5, 100, "Cowbl" },
     };
 
     FLASHMEM void LoadPreset(int idx) {
