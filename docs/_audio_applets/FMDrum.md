@@ -17,7 +17,7 @@ FMDrum is a single-voice FM synthesis drum synthesiser. A sine-wave modulator dr
 
 Eight built-in presets cover the classic electronic drum palette; a random preset is also available for unexpected starting points.
 
-MONO only.
+MONO only - Can be in Slot 0, or Slots 1-4
 
 ---
 
@@ -83,7 +83,7 @@ All parameters except TRG and Type accept CV modulation via assignable CV inputs
 | Metal | 500 Hz | 100 ms |  0% | 3.7×  | 90% |   80 ms | 10% |   80 ms |
 | Cowbl | 562 Hz | 300 ms |  0% | 5.0×  | 80% |  100 ms |  5% |  100 ms |
 
-All presets default to Mix=0 (no audio passthrough).
+All presets default to Mix=100% (no audio passthrough).
 
 ---
 
