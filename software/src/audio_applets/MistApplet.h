@@ -42,9 +42,10 @@ public:
         float eff_size    = constrain(0.01f * size     + size_cv.InF()  * 0.49f,   0.01f, 0.5f);
         float eff_spray   = constrain(0.01f * spray    + spray_cv.InF(),           0.0f, 1.0f);
 
-        // Pitch: semitones ±12 → playback ratio.
-        float eff_semis   = constrain((float)pitch     + pitch_cv.InF()  * 12.0f, -12.0f, 12.0f);
-        float eff_pitch   = SemitonesToRatio(eff_semis);
+        // Pitch: base semitones + V/Oct CV (128 units = 1 semitone, same as PitchToRatio scale).
+        // No range constraint — CV can push well beyond the ±12 st knob range.
+        float eff_semis = (float)pitch + (float)pitch_cv.In() / 128.0f;
+        float eff_pitch = SemitonesToRatio(eff_semis);
 
         // Pitch spread: 0–100% → 0–12 semitones via quadratic curve.
         float eff_psprd_raw   = constrain(0.01f * psprd + psprd_cv.InF(), 0.0f, 1.0f);
