@@ -111,7 +111,7 @@ public:
   void update() override { if (delay_line_) updateCore(); }
 
 private:
-  void updateCore();  // defined in synth_advanced_karplus.cpp with FLASHMEM
+  __attribute__((noinline)) void updateCore();  // defined in synth_advanced_karplus.cpp with FLASHMEM
 
   static constexpr float KS_TWO_PI = 6.28318530718f;
 

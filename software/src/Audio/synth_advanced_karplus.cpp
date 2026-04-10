@@ -7,7 +7,7 @@
 
 #include "synth_advanced_karplus.h"
 
-FLASHMEM void AudioSynthAdvancedKarplus::updateCore() {
+FLASHMEM __attribute__((noinline)) void AudioSynthAdvancedKarplus::updateCore() {
     audio_block_t* out = allocate();
     if (!out) return;
 
