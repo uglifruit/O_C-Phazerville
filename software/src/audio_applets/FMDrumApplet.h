@@ -117,12 +117,13 @@ public:
             (float)mix + Proportion(mix_cv.In(), HEMISPHERE_MAX_INPUT_CV, 100),
             0.f, 100.f);
 
-        // --- Per-block decay coefficients ---
+        // --- Per-block decay coefficients (recalculate only when effective value changes) ---
         // coeff = exp(-AUDIO_BLOCK_SAMPLES / (decay_s * AUDIO_SAMPLE_RATE_EXACT))
-        const float sr = AUDIO_SAMPLE_RATE_EXACT;
-        float amp_coeff   = expf(-128.f / (eff_dec * 0.001f * sr));
-        float fm_coeff    = expf(-128.f / (eff_fmd * 0.001f * sr));
-        float noise_coeff = expf(-128.f / (eff_ndc * 0.001f * sr));
+        // Uses fastexp (bit-manipulation) instead of stdlib expf to avoid math.h linkage.
+        static const float kExpFactor = 128000.f / AUDIO_SAMPLE_RATE_EXACT;
+        if (eff_dec != prev_eff_dec) { amp_coeff   = fastexp(-kExpFactor / eff_dec); prev_eff_dec = eff_dec; }
+        if (eff_fmd != prev_eff_fmd) { fm_coeff    = fastexp(-kExpFactor / eff_fmd); prev_eff_fmd = eff_fmd; }
+        if (eff_ndc != prev_eff_ndc) { noise_coeff = fastexp(-kExpFactor / eff_ndc); prev_eff_ndc = eff_ndc; }
 
         // --- Trigger detection ---
         if (trg.Clock()) {
@@ -154,8 +155,10 @@ public:
         noise_env_stream.Push(
             float_to_q15(constrain(noise_env, 0.f, 1.f)));
 
-        // --- Mixer gains for noise and passthrough ---
-        output_mixer.gain(1, constrain(eff_noi * 0.01f, 0.f, 2.f));
+        // --- Mixer gains: drum scales with mix, passthrough inversely ---
+        float mix_gain = eff_mix * 0.01f;
+        output_mixer.gain(0, mix_gain);
+        output_mixer.gain(1, constrain(eff_noi * mix_gain * 0.01f, 0.f, 2.f));
         output_mixer.gain(2, constrain((100.f - eff_mix) * 0.01f, 0.f, 1.f));
     }
 
@@ -304,6 +307,14 @@ private:
     float amp_env   = 0.0f;
     float fm_env    = 0.0f;
     float noise_env = 0.0f;
+
+    // --- Cached decay coefficients (recalculated only when effective value changes) ---
+    float amp_coeff   = 0.9999f;
+    float fm_coeff    = 0.9999f;
+    float noise_coeff = 0.9999f;
+    float prev_eff_dec = -1.f;
+    float prev_eff_fmd = -1.f;
+    float prev_eff_ndc = -1.f;
 
     // --- UI state ---
     int8_t  cursor      = TRG;
