@@ -1,7 +1,7 @@
 ---
 layout: default
 ---
-# Glitch (mono/stereo)
+# Glitch (mono)
 
 TODO: screenshot
 
@@ -34,7 +34,9 @@ The **DIV** setting then expresses the slice as a fraction (or multiple) of that
 | DIV  | Slice length relative to one beat |
 |------|-----------------------------------|
 | 1/2  | Half a beat (two-beat pattern loops) |
+| 1/3  |             |
 | 1/4  | One quarter (one beat) |
+| 1/6  |             |
 | 1/8  | Eighth note |
 | 1/16 | Sixteenth note (default) |
 | 1/32 | Thirty-second note |
@@ -145,13 +147,13 @@ when MIX is at 100%.
 
 ### Credits
 
-Authored by djphazer.
+Authored by Andy Jenkinson 'uglifruit' - using ClaudeCode.
 DSP core (`AudioEffectGlitch`) and applet wrapper (`GlitchApplet`) released under the
 MIT License.
 
 ```
 MIT License
-Copyright (c) 2025 djphazer
+Copyright (c) 2026 Andy Jenkinson
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
