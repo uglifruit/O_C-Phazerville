@@ -53,6 +53,9 @@ public:
 
     void setMode(uint8_t m) { mode_ = m; }
     void setRatchet(uint8_t r) { ratchet_ = r; }
+    void setBits(uint8_t b)     { bits_     = b & 0x0F; }
+    void setDecimate(uint8_t d) { decimate_ = d & 0x0F; }
+    void setOffset(uint8_t o)   { offset_   = o & 0x0F; }
 
     void update() override {
         audio_block_t* in  = receiveReadOnly(0);
@@ -64,11 +67,14 @@ public:
 
         // Snapshot volatile params once per block to ensure consistency
         // within the sample loop.
-        const bool    cur_hold    = hold_;
-        const size_t  cur_slice   = slice_samples_;
-        const uint8_t cur_mode    = mode_;
-        const uint8_t cur_ratchet = ratchet_;
-        const size_t  buf_size    = g_buffer.NumSamples;
+        const bool    cur_hold     = hold_;
+        const size_t  cur_slice    = slice_samples_;
+        const uint8_t cur_mode     = mode_;
+        const uint8_t cur_ratchet  = ratchet_;
+        const uint8_t cur_bits     = bits_;
+        const uint8_t cur_decimate = decimate_;
+        const uint8_t cur_offset   = offset_;
+        const size_t  buf_size     = g_buffer.NumSamples;
 
         // In RATCHET mode the effective loop is the first 1/ratchet of the slice.
         const size_t loop_len = (cur_mode == MODE_RATCHET && cur_ratchet > 1)
@@ -80,7 +86,9 @@ public:
         // to where the freshest content ends.
         if (cur_hold && !was_held_) {
             size_t wi = g_buffer.GetWriteIx();
-            slice_start_ = (wi + buf_size - cur_slice) % buf_size;
+            size_t total_back = ((size_t)cur_offset + 1) * cur_slice;
+            if (total_back > buf_size) total_back = buf_size;
+            slice_start_ = (wi + buf_size - total_back) % buf_size;
             pos_         = 0;
             ping_fwd_    = true;
         }
@@ -109,20 +117,27 @@ public:
             bool going_fwd = (cur_mode != MODE_REV)
                              && (cur_mode != MODE_PING || ping_fwd_);
 
+            // Sample-rate reduction: quantise position to nearest multiple of
+            // dec_factor so pitch and loop length are preserved.
+            const size_t dec_factor = (size_t)cur_decimate + 1; // 1 = bypass
+
             for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
                 const size_t p = pos_;
+
+                // Apply temporal quantisation (sample-rate reduction).
+                const size_t eff_p = (cur_decimate > 0)
+                    ? (p / dec_factor) * dec_factor
+                    : p;
 
                 // Compute read pointer with single-branch wrap (no modulo).
                 // Slice is constrained to <= buf_size/2 so at most one wrap.
                 size_t read_ptr;
                 if (going_fwd) {
-                    read_ptr = slice_start_ + p;
+                    read_ptr = slice_start_ + eff_p;
                     if (read_ptr >= buf_size) read_ptr -= buf_size;
                 } else {
                     // REV: start from end of slice and walk backwards.
-                    // slice_start_ + cur_slice - 1 - p >= slice_start_ >= 0,
-                    // so no unsigned underflow.
-                    read_ptr = slice_start_ + cur_slice - 1 - p;
+                    read_ptr = slice_start_ + cur_slice - 1 - eff_p;
                     if (read_ptr >= buf_size) read_ptr -= buf_size;
                 }
 
@@ -136,7 +151,12 @@ public:
                     }
                 }
 
-                out->data[i] = Clip16((float)g_buffer.ReadAt(read_ptr) * fade);
+                // Bit crush: quantise to (16 - cur_bits) effective bits.
+                int16_t raw = g_buffer.ReadAt(read_ptr);
+                if (cur_bits > 0) {
+                    raw = (int16_t)((raw >> cur_bits) << cur_bits);
+                }
+                out->data[i] = Clip16((float)raw * fade);
 
                 // Advance position within loop; wrap and handle ping-pong toggle.
                 pos_++;
@@ -164,6 +184,9 @@ private:
     volatile size_t  slice_samples_ = GLITCH_BUFFER_SAMPLES / 8; // 125ms default
     volatile uint8_t mode_          = MODE_FWD;
     volatile uint8_t ratchet_       = 2; // 1–6, used by MODE_RATCHET
+    volatile uint8_t bits_          = 0; // 0=bypass(16-bit) … 15=1-bit
+    volatile uint8_t decimate_      = 0; // 0=bypass … 15=16× sample hold
+    volatile uint8_t offset_        = 0; // 0–15 slices back on hold-rise
 
     // Internal state accessed only from update() — not volatile.
     bool   was_held_    = false;

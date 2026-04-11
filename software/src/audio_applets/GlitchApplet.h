@@ -21,8 +21,11 @@ extern "C" uint8_t external_psram_size;
 //   HOLD_SRC   — gate input that activates stutter (DigitalInputMap)
 //   MODE       — FWD / REV / PNG / MOD (ping-pong / ratchet)
 //   MODE_CV    — CV modulates effective mode index
-//   RATCHET    — ratchet subdivisions 1–6 (visible only in MOD mode)
+//   RATCHET    — ratchet subdivisions 1–6
 //   RATCHET_CV — CV modulates ratchet count
+//   BITS       — bit-depth reduction 0–F (0=bypass, F=1-bit), CV-modulatable
+//   DECIMATE   — sample-rate reduction 0–F (0=bypass, F=16×), CV-modulatable
+//   OFFSET     — slice-capture offset 0–F slices back, CV-modulatable
 //   MIX        — wet/dry balance 0–100%, CV-modulatable
 //
 // AuxButton latches manual hold without a patched gate.
@@ -66,6 +69,14 @@ public:
             (int)ratchet + (int)roundf(ratchet_cv.InF() * 5.0f),
             1, 6);
 
+        // CV-modulated Bit/Spl/Off (all 0–15).
+        uint8_t eff_bits     = (uint8_t)constrain(
+            (int)bits_    + (int)roundf(bits_cv.InF()  * 15.0f), 0, 15);
+        uint8_t eff_decimate = (uint8_t)constrain(
+            (int)decimate_+ (int)roundf(dec_cv.InF()   * 15.0f), 0, 15);
+        uint8_t eff_offset   = (uint8_t)constrain(
+            (int)offset_  + (int)roundf(off_cv.InF()   * 15.0f), 0, 15);
+
         // Equal-power wet/dry gains (computed once, set on all channels).
         float dry_gain, wet_gain;
         EqualPowerFade(dry_gain, wet_gain,
@@ -76,6 +87,9 @@ public:
             channels[ch].glitch_stream.setSliceSamples(slice_samples);
             channels[ch].glitch_stream.setMode(eff_mode);
             channels[ch].glitch_stream.setRatchet(eff_ratchet);
+            channels[ch].glitch_stream.setBits(eff_bits);
+            channels[ch].glitch_stream.setDecimate(eff_decimate);
+            channels[ch].glitch_stream.setOffset(eff_offset);
             channels[ch].wet_dry_mixer.gain(GlitchChannel::DRY_CH, dry_gain);
             channels[ch].wet_dry_mixer.gain(GlitchChannel::WET_CH, wet_gain);
         }
@@ -97,15 +111,15 @@ public:
         gfxPrint(DIV_NAMES[div]);
         gfxEndCursor(cursor == DIV);
 
-        // ── Line 2 (y=25): Hold source ───────────────────────────────────
-        gfxPrint(1, 25, "Hld:");
-        if (manual_hold_) gfxInvert(1, 25, 24, 8); // indicate latched hold
+        // ── Line 2 (y=23): Hold source ───────────────────────────────────
+        gfxPrint(1, 23, "Hld:");
+        if (manual_hold_) gfxInvert(1, 23, 24, 8); // indicate latched hold
         gfxStartCursor();
         gfxPrint(hold_input);
         gfxEndCursor(cursor == HOLD_SRC, false, hold_input.InputName());
 
-        // ── Line 3 (y=35): Playback mode + CV ────────────────────────────
-        gfxPrint(1, 35, "Mod:");
+        // ── Line 3 (y=31): Playback mode + CV ────────────────────────────
+        gfxPrint(1, 31, "Mod:");
         gfxStartCursor();
         gfxPrint(MODE_NAMES[mode]);
         gfxEndCursor(cursor == MODE);
@@ -114,37 +128,52 @@ public:
         gfxPrint(mode_cv);
         gfxEndCursor(cursor == MODE_CV, false, mode_cv.InputName());
 
-        if (mode == MODE_RATCHET) {
-            // ── Line 4 (y=45): Ratchet count + CV (MOD mode only) ────────
-            gfxPrint(1, 45, "Rch:");
-            gfxStartCursor();
-            gfxPrint(ratchet);
-            gfxEndCursor(cursor == RATCHET);
+        // ── Line 4 (y=39): Ratchet count + CV (always visible) ───────────
+        gfxPrint(1, 39, "Rch:");
+        gfxStartCursor();
+        gfxPrint(ratchet);
+        gfxEndCursor(cursor == RATCHET);
 
-            gfxStartCursor();
-            gfxPrint(ratchet_cv);
-            gfxEndCursor(cursor == RATCHET_CV, false, ratchet_cv.InputName());
+        gfxStartCursor();
+        gfxPrint(ratchet_cv);
+        gfxEndCursor(cursor == RATCHET_CV, false, ratchet_cv.InputName());
 
-            // ── Line 5 (y=55): Mix + CV ───────────────────────────────────
-            gfxPrint(1, 55, "Mix:");
-            gfxStartCursor();
-            graphics.printf("%3d%%", mix);
-            gfxEndCursor(cursor == MIX);
+        // ── Line 5 (y=47): Bit / Spl / Off (hex, each with CV dot) ───────
+        // Format: B[0-F][./∗]S[0-F][./∗]O[0-F][./∗]  — 9 chars, ~54px
+        gfxPos(1, 47);
+        gfxPrint("B");
+        gfxStartCursor();
+        graphics.printf("%X", bits_);
+        gfxEndCursor(cursor == BITS);
+        gfxStartCursor();
+        gfxPrint(bits_cv.source ? "*" : ".");
+        gfxEndCursor(cursor == BITS_CV, false, bits_cv.InputName());
 
-            gfxStartCursor();
-            gfxPrint(mix_cv);
-            gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
-        } else {
-            // ── Line 4 (y=45): Mix + CV ───────────────────────────────────
-            gfxPrint(1, 45, "Mix:");
-            gfxStartCursor();
-            graphics.printf("%3d%%", mix);
-            gfxEndCursor(cursor == MIX);
+        gfxPrint("S");
+        gfxStartCursor();
+        graphics.printf("%X", decimate_);
+        gfxEndCursor(cursor == DECIMATE);
+        gfxStartCursor();
+        gfxPrint(dec_cv.source ? "*" : ".");
+        gfxEndCursor(cursor == DECIMATE_CV, false, dec_cv.InputName());
 
-            gfxStartCursor();
-            gfxPrint(mix_cv);
-            gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
-        }
+        gfxPrint("O");
+        gfxStartCursor();
+        graphics.printf("%X", offset_);
+        gfxEndCursor(cursor == OFFSET);
+        gfxStartCursor();
+        gfxPrint(off_cv.source ? "*" : ".");
+        gfxEndCursor(cursor == OFFSET_CV, false, off_cv.InputName());
+
+        // ── Line 6 (y=55): Mix + CV ──────────────────────────────────────
+        gfxPrint(1, 55, "Mix:");
+        gfxStartCursor();
+        graphics.printf("%3d%%", mix);
+        gfxEndCursor(cursor == MIX);
+
+        gfxStartCursor();
+        gfxPrint(mix_cv);
+        gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
 
         gfxDisplayInputMapEditor();
     }
@@ -158,10 +187,13 @@ public:
     FLASHMEM void OnButtonPress() override {
         if (CheckEditInputMapPress(
                 cursor,
-                IndexedInput(CLOCK_SRC,  clock_source),
-                IndexedInput(MODE_CV,    mode_cv),
-                IndexedInput(RATCHET_CV, ratchet_cv),
-                IndexedInput(MIX_CV,     mix_cv)
+                IndexedInput(CLOCK_SRC,   clock_source),
+                IndexedInput(MODE_CV,     mode_cv),
+                IndexedInput(RATCHET_CV,  ratchet_cv),
+                IndexedInput(BITS_CV,     bits_cv),
+                IndexedInput(DECIMATE_CV, dec_cv),
+                IndexedInput(OFFSET_CV,   off_cv),
+                IndexedInput(MIX_CV,      mix_cv)
             ))
             return;
         CursorToggle();
@@ -169,46 +201,45 @@ public:
 
     FLASHMEM void OnEncoderMove(int direction) override {
         if (!EditMode()) {
-            int next = cursor + direction;
-            // Skip RATCHET/RATCHET_CV positions when not in MOD mode.
-            if (mode != MODE_RATCHET) {
-                if (next == RATCHET || next == RATCHET_CV) next += direction;
-            }
-            cursor = (Cursor)constrain(next, 0, CURSOR_LENGTH - 1);
+            cursor = (Cursor)constrain(cursor + direction, 0, CURSOR_LENGTH - 1);
             return;
         }
         if (EditSelectedInputMap(direction)) return;
 
         switch (cursor) {
-            case CLOCK_SRC:  clock_source.ChangeSource(direction); break;
-            case DIV:        div = constrain(div + direction, 0, NUM_DIVS - 1); break;
-            case HOLD_SRC:   hold_input.ChangeSource(direction); break;
-            case MODE:
-                mode = constrain(mode + direction, 0, NUM_MODES - 1);
-                // If leaving MOD mode while cursor is on a ratchet row, reset it.
-                if (mode != MODE_RATCHET && (cursor == RATCHET || cursor == RATCHET_CV))
-                    cursor = MODE;
-                break;
-            case MODE_CV:    mode_cv.ChangeSource(direction); break;
-            case RATCHET:    ratchet = constrain(ratchet + direction, 1, 6); break;
-            case RATCHET_CV: ratchet_cv.ChangeSource(direction); break;
-            case MIX:        mix = constrain(mix + direction, 0, 100); break;
-            case MIX_CV:     mix_cv.ChangeSource(direction); break;
+            case CLOCK_SRC:   clock_source.ChangeSource(direction); break;
+            case DIV:         div = constrain(div + direction, 0, NUM_DIVS - 1); break;
+            case HOLD_SRC:    hold_input.ChangeSource(direction); break;
+            case MODE:        mode = constrain(mode + direction, 0, NUM_MODES - 1); break;
+            case MODE_CV:     mode_cv.ChangeSource(direction); break;
+            case RATCHET:     ratchet = constrain(ratchet + direction, 1, 6); break;
+            case RATCHET_CV:  ratchet_cv.ChangeSource(direction); break;
+            case BITS:        bits_    = (bits_     + direction) & 0x0F; break;
+            case BITS_CV:     bits_cv.ChangeSource(direction); break;
+            case DECIMATE:    decimate_= (decimate_ + direction) & 0x0F; break;
+            case DECIMATE_CV: dec_cv.ChangeSource(direction); break;
+            case OFFSET:      offset_  = (offset_   + direction) & 0x0F; break;
+            case OFFSET_CV:   off_cv.ChangeSource(direction); break;
+            case MIX:         mix = constrain(mix + direction, 0, 100); break;
+            case MIX_CV:      mix_cv.ChangeSource(direction); break;
             default: break;
         }
     }
 
-#define GLITCH_PARAMS  pack<3>(div), pack<2>(mode), pack<3>(ratchet), mix
+#define GLITCH_PARAMS  pack<3>(div), pack<2>(mode), pack<3>(ratchet), mix, \
+                       pack<4>(bits_), pack<4>(decimate_), pack<4>(offset_)
     FLASHMEM void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(GLITCH_PARAMS);
         data[1] = PackPackables(clock_source, hold_input, mix_cv);
-        data[2] = PackPackables(mode_cv, ratchet_cv);
+        data[2] = PackPackables(mode_cv, ratchet_cv, bits_cv, dec_cv); // 4×16=64 bits
+        data[3] = PackPackables(off_cv);
     }
 
     FLASHMEM void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], GLITCH_PARAMS);
         UnpackPackables(data[1], clock_source, hold_input, mix_cv);
-        UnpackPackables(data[2], mode_cv, ratchet_cv);
+        UnpackPackables(data[2], mode_cv, ratchet_cv, bits_cv, dec_cv);
+        UnpackPackables(data[3], off_cv);
     }
 #undef GLITCH_PARAMS
 
@@ -239,6 +270,12 @@ private:
         MODE_CV,
         RATCHET,
         RATCHET_CV,
+        BITS,
+        BITS_CV,
+        DECIMATE,
+        DECIMATE_CV,
+        OFFSET,
+        OFFSET_CV,
         MIX,
         MIX_CV,
         CURSOR_LENGTH,
@@ -250,10 +287,16 @@ private:
     DigitalInputMap clock_source;
     uint8_t  div     = 5;   // default 1/16
     DigitalInputMap hold_input;
-    uint8_t  mode    = 0;   // 0=FWD, 1=REV, 2=PING, 3=MOD
+    uint8_t  mode    = 0;   // 0=FWD, 1=REV, 2=PING, 3=RAT
     CVInputMap mode_cv;
-    uint8_t  ratchet = 2;   // 1–6 subdivisions, used in MOD mode
+    uint8_t  ratchet = 2;   // 1–6 subdivisions
     CVInputMap ratchet_cv;
+    uint8_t  bits_    = 0;  // 0=bypass(16-bit) … F=1-bit
+    CVInputMap bits_cv;
+    uint8_t  decimate_= 0;  // 0=bypass … F=16× sample hold
+    CVInputMap dec_cv;
+    uint8_t  offset_  = 0;  // 0–F slices back on hold-rise
+    CVInputMap off_cv;
     int8_t   mix     = 100; // 0–100% wet
     CVInputMap mix_cv;
 
