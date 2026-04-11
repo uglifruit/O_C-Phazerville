@@ -147,6 +147,146 @@ PROGMEM static const float hann_lut[AudioSpectralFreeze::FFT_SIZE] = {
 };
 
 // =============================================================================
+// Synthesis Hann window LUT, pre-scaled by the OLA normalisation factor.
+//
+// hann_norm_lut[i] = hann_lut[i] * (1.0 / (FFT_SIZE * 0.375))
+//                  = hann_lut[i] / 384.0
+//
+// Storing the product in Flash means the synthesis pass (step 7) is a single
+// arm_vmul_f32 call with no per-sample runtime multiply by the norm constant.
+// =============================================================================
+PROGMEM static const float hann_norm_lut[AudioSpectralFreeze::FFT_SIZE] = {
+    0.0000000000f, 0.0000000246f, 0.0000000982f, 0.0000002210f, 0.0000003929f, 0.0000006139f, 0.0000008840f, 0.0000012032f,
+    0.0000015715f, 0.0000019888f, 0.0000024552f, 0.0000029706f, 0.0000035349f, 0.0000041483f, 0.0000048107f, 0.0000055220f,
+    0.0000062821f, 0.0000070912f, 0.0000079491f, 0.0000088559f, 0.0000098114f, 0.0000108157f, 0.0000118687f, 0.0000129703f,
+    0.0000141206f, 0.0000153195f, 0.0000165669f, 0.0000178628f, 0.0000192071f, 0.0000205999f, 0.0000220410f, 0.0000235303f,
+    0.0000250679f, 0.0000266537f, 0.0000282876f, 0.0000299696f, 0.0000316995f, 0.0000334773f, 0.0000353030f, 0.0000371765f,
+    0.0000390977f, 0.0000410666f, 0.0000430830f, 0.0000451469f, 0.0000472583f, 0.0000494169f, 0.0000516229f, 0.0000538760f,
+    0.0000561761f, 0.0000585233f, 0.0000609174f, 0.0000633583f, 0.0000658460f, 0.0000683802f, 0.0000709611f, 0.0000735883f,
+    0.0000762619f, 0.0000789817f, 0.0000817477f, 0.0000845597f, 0.0000874177f, 0.0000903214f, 0.0000932709f, 0.0000962660f,
+    0.0000993066f, 0.0001023925f, 0.0001055237f, 0.0001087000f, 0.0001119214f, 0.0001151876f, 0.0001184986f, 0.0001218543f,
+    0.0001252545f, 0.0001286990f, 0.0001321879f, 0.0001357209f, 0.0001392978f, 0.0001429187f, 0.0001465832f, 0.0001502914f,
+    0.0001540430f, 0.0001578379f, 0.0001616760f, 0.0001655571f, 0.0001694811f, 0.0001734478f, 0.0001774570f, 0.0001815087f,
+    0.0001856027f, 0.0001897388f, 0.0001939168f, 0.0001981367f, 0.0002023982f, 0.0002067011f, 0.0002110454f, 0.0002154309f,
+    0.0002198573f, 0.0002243246f, 0.0002288325f, 0.0002333809f, 0.0002379697f, 0.0002425985f, 0.0002472674f, 0.0002519760f,
+    0.0002567242f, 0.0002615119f, 0.0002663388f, 0.0002712048f, 0.0002761097f, 0.0002810533f, 0.0002860354f, 0.0002910559f,
+    0.0002961144f, 0.0003012110f, 0.0003063452f, 0.0003115171f, 0.0003167263f, 0.0003219727f, 0.0003272560f, 0.0003325761f,
+    0.0003379328f, 0.0003433259f, 0.0003487552f, 0.0003542203f, 0.0003597213f, 0.0003652578f, 0.0003708297f, 0.0003764366f,
+    0.0003820785f, 0.0003877551f, 0.0003934662f, 0.0003992116f, 0.0004049910f, 0.0004108043f, 0.0004166511f, 0.0004225314f,
+    0.0004284449f, 0.0004343913f, 0.0004403705f, 0.0004463821f, 0.0004524261f, 0.0004585021f, 0.0004646099f, 0.0004707493f,
+    0.0004769201f, 0.0004831220f, 0.0004893547f, 0.0004956182f, 0.0005019121f, 0.0005082361f, 0.0005145901f, 0.0005209738f,
+    0.0005273870f, 0.0005338294f, 0.0005403008f, 0.0005468009f, 0.0005533295f, 0.0005598864f, 0.0005664712f, 0.0005730838f,
+    0.0005797239f, 0.0005863913f, 0.0005930856f, 0.0005998067f, 0.0006065543f, 0.0006133281f, 0.0006201279f, 0.0006269534f,
+    0.0006338044f, 0.0006406807f, 0.0006475818f, 0.0006545077f, 0.0006614579f, 0.0006684324f, 0.0006754307f, 0.0006824527f,
+    0.0006894981f, 0.0006965665f, 0.0007036579f, 0.0007107717f, 0.0007179079f, 0.0007250662f, 0.0007322461f, 0.0007394476f,
+    0.0007466704f, 0.0007539140f, 0.0007611784f, 0.0007684631f, 0.0007757680f, 0.0007830927f, 0.0007904370f, 0.0007978007f,
+    0.0008051833f, 0.0008125847f, 0.0008200045f, 0.0008274426f, 0.0008348985f, 0.0008423721f, 0.0008498630f, 0.0008573709f,
+    0.0008648957f, 0.0008724369f, 0.0008799943f, 0.0008875677f, 0.0008951567f, 0.0009027610f, 0.0009103804f, 0.0009180146f,
+    0.0009256633f, 0.0009333262f, 0.0009410029f, 0.0009486934f, 0.0009563971f, 0.0009641139f, 0.0009718434f, 0.0009795854f,
+    0.0009873395f, 0.0009951056f, 0.0010028832f, 0.0010106720f, 0.0010184719f, 0.0010262825f, 0.0010341035f, 0.0010419346f,
+    0.0010497755f, 0.0010576259f, 0.0010654856f, 0.0010733541f, 0.0010812313f, 0.0010891169f, 0.0010970104f, 0.0011049117f,
+    0.0011128205f, 0.0011207364f, 0.0011286591f, 0.0011365884f, 0.0011445239f, 0.0011524653f, 0.0011604124f, 0.0011683648f,
+    0.0011763223f, 0.0011842845f, 0.0011922512f, 0.0012002220f, 0.0012081967f, 0.0012161749f, 0.0012241563f, 0.0012321407f,
+    0.0012401277f, 0.0012481171f, 0.0012561085f, 0.0012641016f, 0.0012720961f, 0.0012800918f, 0.0012880883f, 0.0012960854f,
+    0.0013040827f, 0.0013120799f, 0.0013200767f, 0.0013280728f, 0.0013360680f, 0.0013440618f, 0.0013520541f, 0.0013600445f,
+    0.0013680328f, 0.0013760185f, 0.0013840015f, 0.0013919813f, 0.0013999578f, 0.0014079305f, 0.0014158993f, 0.0014238638f,
+    0.0014318237f, 0.0014397787f, 0.0014477285f, 0.0014556728f, 0.0014636113f, 0.0014715437f, 0.0014794698f, 0.0014873891f,
+    0.0014953015f, 0.0015032065f, 0.0015111040f, 0.0015189936f, 0.0015268750f, 0.0015347479f, 0.0015426121f, 0.0015504671f,
+    0.0015583128f, 0.0015661489f, 0.0015739749f, 0.0015817908f, 0.0015895960f, 0.0015973905f, 0.0016051737f, 0.0016129456f,
+    0.0016207057f, 0.0016284538f, 0.0016361896f, 0.0016439128f, 0.0016516231f, 0.0016593202f, 0.0016670038f, 0.0016746737f,
+    0.0016823295f, 0.0016899710f, 0.0016975978f, 0.0017052097f, 0.0017128064f, 0.0017203876f, 0.0017279531f, 0.0017355024f,
+    0.0017430355f, 0.0017505518f, 0.0017580513f, 0.0017655336f, 0.0017729984f, 0.0017804454f, 0.0017878744f, 0.0017952850f,
+    0.0018026771f, 0.0018100502f, 0.0018174042f, 0.0018247388f, 0.0018320536f, 0.0018393485f, 0.0018466230f, 0.0018538771f,
+    0.0018611103f, 0.0018683224f, 0.0018755132f, 0.0018826824f, 0.0018898296f, 0.0018969547f, 0.0019040573f, 0.0019111372f,
+    0.0019181942f, 0.0019252279f, 0.0019322381f, 0.0019392245f, 0.0019461869f, 0.0019531250f, 0.0019600385f, 0.0019669273f,
+    0.0019737909f, 0.0019806292f, 0.0019874419f, 0.0019942287f, 0.0020009895f, 0.0020077238f, 0.0020144316f, 0.0020211125f,
+    0.0020277662f, 0.0020343926f, 0.0020409914f, 0.0020475622f, 0.0020541050f, 0.0020606194f, 0.0020671052f, 0.0020735621f,
+    0.0020799899f, 0.0020863884f, 0.0020927573f, 0.0020990963f, 0.0021054053f, 0.0021116840f, 0.0021179322f, 0.0021241495f,
+    0.0021303359f, 0.0021364910f, 0.0021426147f, 0.0021487066f, 0.0021547666f, 0.0021607944f, 0.0021667898f, 0.0021727527f,
+    0.0021786826f, 0.0021845795f, 0.0021904432f, 0.0021962733f, 0.0022020696f, 0.0022078321f, 0.0022135603f, 0.0022192542f,
+    0.0022249134f, 0.0022305379f, 0.0022361273f, 0.0022416815f, 0.0022472003f, 0.0022526834f, 0.0022581306f, 0.0022635418f,
+    0.0022689167f, 0.0022742552f, 0.0022795569f, 0.0022848218f, 0.0022900496f, 0.0022952402f, 0.0023003933f, 0.0023055087f,
+    0.0023105863f, 0.0023156258f, 0.0023206271f, 0.0023255900f, 0.0023305142f, 0.0023353997f, 0.0023402462f, 0.0023450535f,
+    0.0023498215f, 0.0023545499f, 0.0023592387f, 0.0023638876f, 0.0023684964f, 0.0023730650f, 0.0023775932f, 0.0023820808f,
+    0.0023865277f, 0.0023909336f, 0.0023952985f, 0.0023996222f, 0.0024039045f, 0.0024081451f, 0.0024123441f, 0.0024165012f,
+    0.0024206162f, 0.0024246891f, 0.0024287196f, 0.0024327076f, 0.0024366529f, 0.0024405555f, 0.0024444151f, 0.0024482316f,
+    0.0024520049f, 0.0024557348f, 0.0024594212f, 0.0024630639f, 0.0024666628f, 0.0024702178f, 0.0024737287f, 0.0024771954f,
+    0.0024806178f, 0.0024839958f, 0.0024873291f, 0.0024906178f, 0.0024938616f, 0.0024970605f, 0.0025002142f, 0.0025033228f,
+    0.0025063861f, 0.0025094039f, 0.0025123762f, 0.0025153028f, 0.0025181837f, 0.0025210187f, 0.0025238077f, 0.0025265506f,
+    0.0025292473f, 0.0025318978f, 0.0025345018f, 0.0025370594f, 0.0025395704f, 0.0025420346f, 0.0025444522f, 0.0025468228f,
+    0.0025491465f, 0.0025514231f, 0.0025536527f, 0.0025558350f, 0.0025579700f, 0.0025600576f, 0.0025620978f, 0.0025640904f,
+    0.0025660355f, 0.0025679328f, 0.0025697825f, 0.0025715842f, 0.0025733381f, 0.0025750441f, 0.0025767020f, 0.0025783119f,
+    0.0025798735f, 0.0025813870f, 0.0025828523f, 0.0025842692f, 0.0025856378f, 0.0025869579f, 0.0025882296f, 0.0025894527f,
+    0.0025906273f, 0.0025917533f, 0.0025928306f, 0.0025938592f, 0.0025948391f, 0.0025957703f, 0.0025966526f, 0.0025974861f,
+    0.0025982707f, 0.0025990065f, 0.0025996933f, 0.0026003311f, 0.0026009200f, 0.0026014599f, 0.0026019508f, 0.0026023927f,
+    0.0026027854f, 0.0026031292f, 0.0026034238f, 0.0026036694f, 0.0026038658f, 0.0026040132f, 0.0026041114f, 0.0026041605f,
+    0.0026041605f, 0.0026041114f, 0.0026040132f, 0.0026038658f, 0.0026036694f, 0.0026034238f, 0.0026031292f, 0.0026027854f,
+    0.0026023927f, 0.0026019508f, 0.0026014599f, 0.0026009200f, 0.0026003311f, 0.0025996933f, 0.0025990065f, 0.0025982707f,
+    0.0025974861f, 0.0025966526f, 0.0025957703f, 0.0025948391f, 0.0025938592f, 0.0025928306f, 0.0025917533f, 0.0025906273f,
+    0.0025894527f, 0.0025882296f, 0.0025869579f, 0.0025856378f, 0.0025842692f, 0.0025828523f, 0.0025813870f, 0.0025798735f,
+    0.0025783119f, 0.0025767020f, 0.0025750441f, 0.0025733381f, 0.0025715842f, 0.0025697825f, 0.0025679328f, 0.0025660355f,
+    0.0025640904f, 0.0025620978f, 0.0025600576f, 0.0025579700f, 0.0025558350f, 0.0025536527f, 0.0025514231f, 0.0025491465f,
+    0.0025468228f, 0.0025444522f, 0.0025420346f, 0.0025395704f, 0.0025370594f, 0.0025345018f, 0.0025318978f, 0.0025292473f,
+    0.0025265506f, 0.0025238077f, 0.0025210187f, 0.0025181837f, 0.0025153028f, 0.0025123762f, 0.0025094039f, 0.0025063861f,
+    0.0025033228f, 0.0025002142f, 0.0024970605f, 0.0024938616f, 0.0024906178f, 0.0024873291f, 0.0024839958f, 0.0024806178f,
+    0.0024771954f, 0.0024737287f, 0.0024702178f, 0.0024666628f, 0.0024630639f, 0.0024594212f, 0.0024557348f, 0.0024520049f,
+    0.0024482316f, 0.0024444151f, 0.0024405555f, 0.0024366529f, 0.0024327076f, 0.0024287196f, 0.0024246891f, 0.0024206162f,
+    0.0024165012f, 0.0024123441f, 0.0024081451f, 0.0024039045f, 0.0023996222f, 0.0023952985f, 0.0023909336f, 0.0023865277f,
+    0.0023820808f, 0.0023775932f, 0.0023730650f, 0.0023684964f, 0.0023638876f, 0.0023592387f, 0.0023545499f, 0.0023498215f,
+    0.0023450535f, 0.0023402462f, 0.0023353997f, 0.0023305142f, 0.0023255900f, 0.0023206271f, 0.0023156258f, 0.0023105863f,
+    0.0023055087f, 0.0023003933f, 0.0022952402f, 0.0022900496f, 0.0022848218f, 0.0022795569f, 0.0022742552f, 0.0022689167f,
+    0.0022635418f, 0.0022581306f, 0.0022526834f, 0.0022472003f, 0.0022416815f, 0.0022361273f, 0.0022305379f, 0.0022249134f,
+    0.0022192542f, 0.0022135603f, 0.0022078321f, 0.0022020696f, 0.0021962733f, 0.0021904432f, 0.0021845795f, 0.0021786826f,
+    0.0021727527f, 0.0021667898f, 0.0021607944f, 0.0021547666f, 0.0021487066f, 0.0021426147f, 0.0021364910f, 0.0021303359f,
+    0.0021241495f, 0.0021179322f, 0.0021116840f, 0.0021054053f, 0.0020990963f, 0.0020927573f, 0.0020863884f, 0.0020799899f,
+    0.0020735621f, 0.0020671052f, 0.0020606194f, 0.0020541050f, 0.0020475622f, 0.0020409914f, 0.0020343926f, 0.0020277662f,
+    0.0020211125f, 0.0020144316f, 0.0020077238f, 0.0020009895f, 0.0019942287f, 0.0019874419f, 0.0019806292f, 0.0019737909f,
+    0.0019669273f, 0.0019600385f, 0.0019531250f, 0.0019461869f, 0.0019392245f, 0.0019322381f, 0.0019252279f, 0.0019181942f,
+    0.0019111372f, 0.0019040573f, 0.0018969547f, 0.0018898296f, 0.0018826824f, 0.0018755132f, 0.0018683224f, 0.0018611103f,
+    0.0018538771f, 0.0018466230f, 0.0018393485f, 0.0018320536f, 0.0018247388f, 0.0018174042f, 0.0018100502f, 0.0018026771f,
+    0.0017952850f, 0.0017878744f, 0.0017804454f, 0.0017729984f, 0.0017655336f, 0.0017580513f, 0.0017505518f, 0.0017430355f,
+    0.0017355024f, 0.0017279531f, 0.0017203876f, 0.0017128064f, 0.0017052097f, 0.0016975978f, 0.0016899710f, 0.0016823295f,
+    0.0016746737f, 0.0016670038f, 0.0016593202f, 0.0016516231f, 0.0016439128f, 0.0016361896f, 0.0016284538f, 0.0016207057f,
+    0.0016129456f, 0.0016051737f, 0.0015973905f, 0.0015895960f, 0.0015817908f, 0.0015739749f, 0.0015661489f, 0.0015583128f,
+    0.0015504671f, 0.0015426121f, 0.0015347479f, 0.0015268750f, 0.0015189936f, 0.0015111040f, 0.0015032065f, 0.0014953015f,
+    0.0014873891f, 0.0014794698f, 0.0014715437f, 0.0014636113f, 0.0014556728f, 0.0014477285f, 0.0014397787f, 0.0014318237f,
+    0.0014238638f, 0.0014158993f, 0.0014079305f, 0.0013999578f, 0.0013919813f, 0.0013840015f, 0.0013760185f, 0.0013680328f,
+    0.0013600445f, 0.0013520541f, 0.0013440618f, 0.0013360680f, 0.0013280728f, 0.0013200767f, 0.0013120799f, 0.0013040827f,
+    0.0012960854f, 0.0012880883f, 0.0012800918f, 0.0012720961f, 0.0012641016f, 0.0012561085f, 0.0012481171f, 0.0012401277f,
+    0.0012321407f, 0.0012241563f, 0.0012161749f, 0.0012081967f, 0.0012002220f, 0.0011922512f, 0.0011842845f, 0.0011763223f,
+    0.0011683648f, 0.0011604124f, 0.0011524653f, 0.0011445239f, 0.0011365884f, 0.0011286591f, 0.0011207364f, 0.0011128205f,
+    0.0011049117f, 0.0010970104f, 0.0010891169f, 0.0010812313f, 0.0010733541f, 0.0010654856f, 0.0010576259f, 0.0010497755f,
+    0.0010419346f, 0.0010341035f, 0.0010262825f, 0.0010184719f, 0.0010106720f, 0.0010028832f, 0.0009951056f, 0.0009873395f,
+    0.0009795854f, 0.0009718434f, 0.0009641139f, 0.0009563971f, 0.0009486934f, 0.0009410029f, 0.0009333262f, 0.0009256633f,
+    0.0009180146f, 0.0009103804f, 0.0009027610f, 0.0008951567f, 0.0008875677f, 0.0008799943f, 0.0008724369f, 0.0008648957f,
+    0.0008573709f, 0.0008498630f, 0.0008423721f, 0.0008348985f, 0.0008274426f, 0.0008200045f, 0.0008125847f, 0.0008051833f,
+    0.0007978007f, 0.0007904370f, 0.0007830927f, 0.0007757680f, 0.0007684631f, 0.0007611784f, 0.0007539140f, 0.0007466704f,
+    0.0007394476f, 0.0007322461f, 0.0007250662f, 0.0007179079f, 0.0007107717f, 0.0007036579f, 0.0006965665f, 0.0006894981f,
+    0.0006824527f, 0.0006754307f, 0.0006684324f, 0.0006614579f, 0.0006545077f, 0.0006475818f, 0.0006406807f, 0.0006338044f,
+    0.0006269534f, 0.0006201279f, 0.0006133281f, 0.0006065543f, 0.0005998067f, 0.0005930856f, 0.0005863913f, 0.0005797239f,
+    0.0005730838f, 0.0005664712f, 0.0005598864f, 0.0005533295f, 0.0005468009f, 0.0005403008f, 0.0005338294f, 0.0005273870f,
+    0.0005209738f, 0.0005145901f, 0.0005082361f, 0.0005019121f, 0.0004956182f, 0.0004893547f, 0.0004831220f, 0.0004769201f,
+    0.0004707493f, 0.0004646099f, 0.0004585021f, 0.0004524261f, 0.0004463821f, 0.0004403705f, 0.0004343913f, 0.0004284449f,
+    0.0004225314f, 0.0004166511f, 0.0004108043f, 0.0004049910f, 0.0003992116f, 0.0003934662f, 0.0003877551f, 0.0003820785f,
+    0.0003764366f, 0.0003708297f, 0.0003652578f, 0.0003597213f, 0.0003542203f, 0.0003487552f, 0.0003433259f, 0.0003379328f,
+    0.0003325761f, 0.0003272560f, 0.0003219727f, 0.0003167263f, 0.0003115171f, 0.0003063452f, 0.0003012110f, 0.0002961144f,
+    0.0002910559f, 0.0002860354f, 0.0002810533f, 0.0002761097f, 0.0002712048f, 0.0002663388f, 0.0002615119f, 0.0002567242f,
+    0.0002519760f, 0.0002472674f, 0.0002425985f, 0.0002379697f, 0.0002333809f, 0.0002288325f, 0.0002243246f, 0.0002198573f,
+    0.0002154309f, 0.0002110454f, 0.0002067011f, 0.0002023982f, 0.0001981367f, 0.0001939168f, 0.0001897388f, 0.0001856027f,
+    0.0001815087f, 0.0001774570f, 0.0001734478f, 0.0001694811f, 0.0001655571f, 0.0001616760f, 0.0001578379f, 0.0001540430f,
+    0.0001502914f, 0.0001465832f, 0.0001429187f, 0.0001392978f, 0.0001357209f, 0.0001321879f, 0.0001286990f, 0.0001252545f,
+    0.0001218543f, 0.0001184986f, 0.0001151876f, 0.0001119214f, 0.0001087000f, 0.0001055237f, 0.0001023925f, 0.0000993066f,
+    0.0000962660f, 0.0000932709f, 0.0000903214f, 0.0000874177f, 0.0000845597f, 0.0000817477f, 0.0000789817f, 0.0000762619f,
+    0.0000735883f, 0.0000709611f, 0.0000683802f, 0.0000658460f, 0.0000633583f, 0.0000609174f, 0.0000585233f, 0.0000561761f,
+    0.0000538760f, 0.0000516229f, 0.0000494169f, 0.0000472583f, 0.0000451469f, 0.0000430830f, 0.0000410666f, 0.0000390977f,
+    0.0000371765f, 0.0000353030f, 0.0000334773f, 0.0000316995f, 0.0000299696f, 0.0000282876f, 0.0000266537f, 0.0000250679f,
+    0.0000235303f, 0.0000220410f, 0.0000205999f, 0.0000192071f, 0.0000178628f, 0.0000165669f, 0.0000153195f, 0.0000141206f,
+    0.0000129703f, 0.0000118687f, 0.0000108157f, 0.0000098114f, 0.0000088559f, 0.0000079491f, 0.0000070912f, 0.0000062821f,
+    0.0000055220f, 0.0000048107f, 0.0000041483f, 0.0000035349f, 0.0000029706f, 0.0000024552f, 0.0000019888f, 0.0000015715f,
+    0.0000012032f, 0.0000008840f, 0.0000006139f, 0.0000003929f, 0.0000002210f, 0.0000000982f, 0.0000000246f, 0.0000000000f,
+};
+
+// =============================================================================
 // Constructor
 // =============================================================================
 AudioSpectralFreeze::AudioSpectralFreeze()
@@ -178,25 +318,31 @@ float AudioSpectralFreeze::fastRand() {
 // processFrame — called every HOP_SIZE (256) samples from update()
 //
 // Pipeline:
-//   1. Unroll circular input_buf into fft_buf (linear order)
-//   2. Apply analysis Hann window (multiply by hann_lut[], read from Flash)
+//   1. Unroll circular input_buf into fft_buf (two arm_copy_f32 calls)
+//   2. Apply analysis Hann window (arm_vmul_f32 with hann_lut[])
 //   3. arm_rfft_fast_f32 forward transform (real-valued, in-place)
-//   4. Freeze edge detection: capture magnitudes & phases on false→true edge
+//   4. Freeze edge detection: capture raw complex (re, im) on false→true edge
+//      — no sqrtf, no atan2f
 //   5. Spectrum processing:
 //        not frozen → pass complex output unchanged (perfect OLA reconstruction)
-//        frozen     → rebuild complex spectrum from stored magnitudes + smeared phase
+//        frozen, smear=0 → direct copy of frozen_re/frozen_im, zero trig
+//        frozen, smear=1 → random direction, original magnitude (arm_sqrt_f32 + sin/cos)
+//        frozen, blend   → lerp between frozen direction and random (arm_sqrt_f32 + sin/cos)
 //   6. arm_rfft_fast_f32 inverse transform (in-place)
-//   7. Apply synthesis Hann window + OLA normalisation factor
-//   8. Accumulate into OLA ring buffer at ola_write; advance ola_write by HOP_SIZE
+//   7. Synthesis window + normalisation: arm_vmul_f32 with hann_norm_lut[]
+//   8. OLA accumulation: two arm_add_f32 calls; advance ola_write by HOP_SIZE
 // =============================================================================
 void AudioSpectralFreeze::processFrame() {
     if (!rfft_ready) return;
 
     // --- Step 1: Unroll circular input ring into a linear array for the FFT ---
-    // input_write points to the next slot to be filled, so the oldest sample
-    // is at input_write (mod FFT_SIZE) and the newest is just before it.
-    for (int i = 0; i < FFT_SIZE; ++i) {
-        fft_buf[i] = input_buf[(input_write + i) & (FFT_SIZE - 1)];
+    // input_write is the next-write slot; oldest sample is at input_write.
+    // Split into at most two arm_copy_f32 calls to avoid per-element masking.
+    {
+        const int src  = input_write;
+        const int tail = FFT_SIZE - src;   // samples from src to end of buffer
+        arm_copy_f32(input_buf + src, fft_buf,        tail);
+        arm_copy_f32(input_buf,       fft_buf + tail, FFT_SIZE - tail);
     }
 
     // --- Step 2: Analysis window (Hann) ---
@@ -219,41 +365,57 @@ void AudioSpectralFreeze::processFrame() {
     if (frozen) {
         // Capture magnitudes and phases on the first frozen frame
         if (freeze_edge) {
-            // DC and Nyquist are real-only — store magnitude directly
-            frozen_mag[0]   = fft_buf[0];   // DC  (may be negative; keep sign)
-            frozen_mag[512] = fft_buf[1];   // Nyquist
-
-            // Complex bins 1…511
+            // DC and Nyquist are real-only — store raw values (sign preserved).
+            // Complex bins 1…511: store raw (re, im) so smear=0 synthesis needs
+            // no trig at all, and atan2f is never called.
+            frozen_re[0]   = fft_buf[0];  // DC
+            frozen_re[512] = fft_buf[1];  // Nyquist
             for (int k = 1; k < 512; ++k) {
-                const float re = fft_buf[2 * k];
-                const float im = fft_buf[2 * k + 1];
-                frozen_mag[k]   = sqrtf(re * re + im * im);
-                frozen_phase[k] = atan2f(im, re);
+                frozen_re[k] = fft_buf[2 * k];
+                frozen_im[k] = fft_buf[2 * k + 1];
             }
         }
 
-        // Rebuild complex spectrum from frozen magnitudes + smear-weighted phase.
+        // Rebuild complex spectrum from frozen coefficients.
         // fft_buf is overwritten here ready for the IFFT.
-        fft_buf[0] = frozen_mag[0];    // DC
-        fft_buf[1] = frozen_mag[512];  // Nyquist
+        fft_buf[0] = frozen_re[0];    // DC
+        fft_buf[1] = frozen_re[512];  // Nyquist
 
-        for (int k = 1; k < 512; ++k) {
-            const float mag = frozen_mag[k];
-            float used_phase;
-            if (smear >= 1.0f) {
-                // Fully random — bypass atan2/lerp entirely
-                used_phase = fastRand();
-            } else if (smear <= 0.0f) {
-                // Accurate — reuse captured phase (static, metallic)
-                used_phase = frozen_phase[k];
-            } else {
-                // Blend: lerp from accurate toward random
-                used_phase = frozen_phase[k] + smear * (fastRand() - frozen_phase[k]);
+        if (smear <= 0.0f) {
+            // --- smear=0: direct copy, zero trig ---
+            for (int k = 1; k < 512; ++k) {
+                fft_buf[2 * k]     = frozen_re[k];
+                fft_buf[2 * k + 1] = frozen_im[k];
             }
-            // arm_cos_f32 / arm_sin_f32: CMSIS fast approximations (~10× faster
-            // than cosf/sinf on Cortex-M7 without FPU vectorisation)
-            fft_buf[2 * k]     = mag * arm_cos_f32(used_phase);
-            fft_buf[2 * k + 1] = mag * arm_sin_f32(used_phase);
+        } else if (smear >= 1.0f) {
+            // --- smear=1: fully random direction, original magnitude ---
+            // arm_sqrt_f32 uses the same Cortex-M7 VSQRT instruction as sqrtf.
+            for (int k = 1; k < 512; ++k) {
+                const float re = frozen_re[k], im = frozen_im[k];
+                float mag;
+                arm_sqrt_f32(re * re + im * im, &mag);
+                const float rnd = fastRand();
+                fft_buf[2 * k]     = mag * arm_cos_f32(rnd);
+                fft_buf[2 * k + 1] = mag * arm_sin_f32(rnd);
+            }
+        } else {
+            // --- blend: lerp between frozen direction and random direction ---
+            for (int k = 1; k < 512; ++k) {
+                const float re = frozen_re[k], im = frozen_im[k];
+                float mag;
+                arm_sqrt_f32(re * re + im * im, &mag);
+                if (mag > 0.0f) {
+                    const float inv    = 1.0f / mag;
+                    const float rnd    = fastRand();
+                    const float re_n   = re * inv + smear * (arm_cos_f32(rnd) - re * inv);
+                    const float im_n   = im * inv + smear * (arm_sin_f32(rnd) - im * inv);
+                    fft_buf[2 * k]     = mag * re_n;
+                    fft_buf[2 * k + 1] = mag * im_n;
+                } else {
+                    fft_buf[2 * k]     = 0.0f;
+                    fft_buf[2 * k + 1] = 0.0f;
+                }
+            }
         }
     }
     // else: not frozen → fft_buf already contains the live complex spectrum;
@@ -267,19 +429,22 @@ void AudioSpectralFreeze::processFrame() {
     arm_rfft_fast_f32(&rfft_inst, fft_buf, fft_buf, 1);
 
     // --- Step 7: Synthesis window + OLA normalisation ---
-    // For Hann²-OLA at 4× overlap the normalisation constant is:
-    //   sum_{n} w²[n] / HOP_SIZE  =  3/8 = 0.375  (for a Hann window)
-    // So we divide by FFT_SIZE * 0.375 to recover unity gain.
-    const float norm = 1.0f / (FFT_SIZE * 0.375f);
-    for (int i = 0; i < FFT_SIZE; ++i) {
-        fft_buf[i] *= hann_lut[i] * norm;
-    }
+    // hann_norm_lut[i] = hann[i] / (FFT_SIZE * 0.375) — pre-scaled in Flash.
+    // arm_vmul_f32 applies the window and normalisation in one SIMD pass.
+    arm_vmul_f32(fft_buf, hann_norm_lut, fft_buf, FFT_SIZE);
 
     // --- Step 8: Overlap-Add accumulation ---
-    // Add this synthesis frame into the output ring at ola_write.
-    // OLA_SIZE is a power of 2 so the mask is safe.
-    for (int i = 0; i < FFT_SIZE; ++i) {
-        ola_buf[(ola_write + i) & (OLA_SIZE - 1)] += fft_buf[i];
+    // Split into at most two arm_add_f32 calls to avoid per-element masking.
+    // OLA_SIZE=2048, FFT_SIZE=1024, ola_write is a multiple of HOP_SIZE=256,
+    // so the write wraps at most once.
+    {
+        const int tail = OLA_SIZE - ola_write;  // slots from ola_write to end
+        if (tail >= FFT_SIZE) {
+            arm_add_f32(ola_buf + ola_write, fft_buf, ola_buf + ola_write, FFT_SIZE);
+        } else {
+            arm_add_f32(ola_buf + ola_write, fft_buf,        ola_buf + ola_write, tail);
+            arm_add_f32(ola_buf,             fft_buf + tail, ola_buf,             FFT_SIZE - tail);
+        }
     }
     ola_write = (ola_write + HOP_SIZE) & (OLA_SIZE - 1);
 }
@@ -303,23 +468,32 @@ void AudioSpectralFreeze::update() {
     }
 
     // --- Ingest incoming samples into the input circular ring ---
+    // fft_buf[] is idle between processFrame() calls — reuse its first
+    // AUDIO_BLOCK_SAMPLES floats as a temporary, avoiding stack allocation.
     if (in) {
-        // Convert the 128 q15 samples → float and write into the ring.
-        // arm_q15_to_float scales by 1/32768 to give values in [-1, 1].
-        float tmp[AUDIO_BLOCK_SAMPLES];
-        arm_q15_to_float(in->data, tmp, AUDIO_BLOCK_SAMPLES);
-        for (int i = 0; i < AUDIO_BLOCK_SAMPLES; ++i) {
-            input_buf[input_write] = tmp[i];
-            input_write = (input_write + 1) & (FFT_SIZE - 1);
+        // arm_q15_to_float scales by 1/32768 → [-1, 1].
+        const int space = FFT_SIZE - input_write;  // slots before ring end
+        if (space >= AUDIO_BLOCK_SAMPLES) {
+            // No wrap: convert directly into the ring.
+            arm_q15_to_float(in->data, input_buf + input_write, AUDIO_BLOCK_SAMPLES);
+        } else {
+            // Wrap: convert into fft_buf, then copy in two chunks.
+            arm_q15_to_float(in->data, fft_buf, AUDIO_BLOCK_SAMPLES);
+            arm_copy_f32(fft_buf,         input_buf + input_write, space);
+            arm_copy_f32(fft_buf + space, input_buf,               AUDIO_BLOCK_SAMPLES - space);
         }
         release(in);
     } else {
-        // No input block — advance ring with silence so OLA timing stays correct
-        for (int i = 0; i < AUDIO_BLOCK_SAMPLES; ++i) {
-            input_buf[input_write] = 0.0f;
-            input_write = (input_write + 1) & (FFT_SIZE - 1);
+        // No input block — fill ring with silence so OLA timing stays correct.
+        const int space = FFT_SIZE - input_write;
+        if (space >= AUDIO_BLOCK_SAMPLES) {
+            arm_fill_f32(0.0f, input_buf + input_write, AUDIO_BLOCK_SAMPLES);
+        } else {
+            arm_fill_f32(0.0f, input_buf + input_write, space);
+            arm_fill_f32(0.0f, input_buf,               AUDIO_BLOCK_SAMPLES - space);
         }
     }
+    input_write = (input_write + AUDIO_BLOCK_SAMPLES) & (FFT_SIZE - 1);
 
     // --- Check whether a new FFT frame is due ---
     hop_counter += AUDIO_BLOCK_SAMPLES;
@@ -329,16 +503,24 @@ void AudioSpectralFreeze::update() {
     }
 
     // --- Drain output from the OLA ring, convert float → q15, transmit ---
-    float out_f[AUDIO_BLOCK_SAMPLES];
-    for (int i = 0; i < AUDIO_BLOCK_SAMPLES; ++i) {
-        int idx = (ola_read + i) & (OLA_SIZE - 1);
-        out_f[i] = ola_buf[idx];
-        ola_buf[idx] = 0.0f;  // zero after reading so the slot is clean for OLA
+    // Reuse fft_buf[] as the output staging buffer (same rationale as above).
+    // OLA_SIZE=2048, AUDIO_BLOCK_SAMPLES=128 — wraps at most once.
+    {
+        const int tail = OLA_SIZE - ola_read;
+        if (tail >= AUDIO_BLOCK_SAMPLES) {
+            arm_copy_f32(ola_buf + ola_read, fft_buf, AUDIO_BLOCK_SAMPLES);
+            arm_fill_f32(0.0f, ola_buf + ola_read, AUDIO_BLOCK_SAMPLES);
+        } else {
+            arm_copy_f32(ola_buf + ola_read, fft_buf,        tail);
+            arm_copy_f32(ola_buf,            fft_buf + tail, AUDIO_BLOCK_SAMPLES - tail);
+            arm_fill_f32(0.0f, ola_buf + ola_read, tail);
+            arm_fill_f32(0.0f, ola_buf,            AUDIO_BLOCK_SAMPLES - tail);
+        }
     }
     ola_read = (ola_read + AUDIO_BLOCK_SAMPLES) & (OLA_SIZE - 1);
 
     // arm_float_to_q15 clips to [-1, 1] and scales by 32767
-    arm_float_to_q15(out_f, out->data, AUDIO_BLOCK_SAMPLES);
+    arm_float_to_q15(fft_buf, out->data, AUDIO_BLOCK_SAMPLES);
     transmit(out);
     release(out);
 }

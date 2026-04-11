@@ -73,10 +73,15 @@ private:
 
     // -------------------------------------------------------------------------
     // Frozen spectrum storage — captured on the false→true edge of frozen.
+    // Stores the raw complex FFT output rather than polar form, so smear=0
+    // synthesis needs no trig at all (just a direct copy).
+    //   frozen_re[0]   = DC bin (real only)
+    //   frozen_re[512] = Nyquist bin (real only)
+    //   frozen_re[k], frozen_im[k]  = complex bin k (k = 1…511)
     // -------------------------------------------------------------------------
-    float frozen_mag[NUM_BINS]   = {};  // magnitude of each bin
-    float frozen_phase[NUM_BINS] = {};  // phase (radians) of each bin at freeze moment
-    bool  was_frozen             = false;
+    float frozen_re[NUM_BINS] = {};  // real part at freeze moment
+    float frozen_im[NUM_BINS] = {};  // imaginary part at freeze moment
+    bool  was_frozen          = false;
 
     // -------------------------------------------------------------------------
     // OLA (Overlap-Add) output ring buffer.
