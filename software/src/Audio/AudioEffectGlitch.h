@@ -98,6 +98,30 @@ public:
         // releasing hold returns to live audio without a stale gap).
         if (in) g_buffer.Write(in);
 
+        // LIVE FX mode: FWD + offset=0 + hold routes live audio through bit crush /
+        // sample decimation directly, ignoring div and slice logic entirely.
+        if (cur_mode == MODE_FWD && cur_offset == 0 && cur_hold) {
+            const size_t dec_factor = (size_t)cur_decimate + 1;
+            if (in) {
+                for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
+                    if (live_dec_counter_ == 0)
+                        live_dec_held_ = in->data[i];
+                    int16_t raw = live_dec_held_;
+                    if (cur_bits > 0)
+                        raw = (int16_t)((raw >> cur_bits) << cur_bits);
+                    out->data[i] = raw;
+                    if (++live_dec_counter_ >= dec_factor)
+                        live_dec_counter_ = 0;
+                }
+            } else {
+                memset(out->data, 0, AUDIO_BLOCK_SAMPLES * sizeof(int16_t));
+            }
+            transmit(out, 0);
+            release(out);
+            if (in) release(in);
+            return;
+        }
+
         if (!cur_hold || !g_buffer.IsReady()) {
             // BYPASS: pass input through unchanged.
             if (in) {
@@ -192,5 +216,7 @@ private:
     bool   was_held_    = false;
     size_t slice_start_ = 0;
     size_t pos_         = 0;
+    size_t live_dec_counter_ = 0; // sample-hold counter for LIVE FX mode
+    int16_t live_dec_held_   = 0; // last held sample for LIVE FX mode
     bool   ping_fwd_    = true;
 };

@@ -75,7 +75,7 @@ Selects how the frozen slice is looped:
 **MOD CV** shifts the active mode by a CV voltage, allowing automated or random mode
 switching mid-performance. At full CV swing the entire 0–3 range is covered.
 
-#### RCH — Ratchet count / RCH CV *(visible only in RAT mode)*
+#### RCH — Ratchet count / RCH CV
 When **MOD** is set to `RAT`, **RCH** subdivides the frozen slice into *N* equal
 sub-loops, so the capture window is repeated *N* times per gate event at a higher rate.
 
@@ -89,6 +89,30 @@ sub-loops, so the capture window is repeated *N* times per gate event at a highe
 
 **RCH CV** sweeps the ratchet count ±5 around the base value. Patching a random or
 stepped CV source here gives unpredictable subdivision changes mid-loop.
+
+#### Bit / Smp / Off — Bit crush / Sample-rate reduction / Slice offset
+
+These three parameters each occupy their own display row as a single hex digit (`0`–`F`).
+The display scrolls — rows 1–6 are visible at a time; scroll arrows appear when more rows
+exist above or below. Each parameter has its own CV input shown inline.
+
+**B — Bit crush (0–F)**
+Reduces bit depth of the looped signal. `0` = full 16-bit quality (bypass, default).
+Each increment removes one bit: `8` ≈ 8-bit lo-fi, `F` = 1-bit comparator square wave.
+
+**Smp — Sample-rate reduction (0–F)**
+Repeats each sample position in the loop *N+1* times before advancing, creating a
+staircase/aliasing texture without changing pitch or loop length.
+`0` = bypass (default). `F` = 16× hold — very coarse stepping.
+
+**O — Slice offset (0–F)**
+On each hold-rise, instead of capturing the most-recent slice, reaches back
+*(O + 1) × slice_length* into the buffer. `0` = most recent (default, same as
+original behaviour). `F` = up to 15 slices back — frozen material from up to
+one second ago, depending on DIV setting.
+
+All three accept CV. Positive CV pushes the value toward `F`; negative attenuation
+pulls it back toward `0`.
 
 #### MIX — Wet/dry balance / MIX CV
 Blends the frozen/looped signal (wet) with the continuously live signal (dry) using
@@ -122,6 +146,19 @@ when MIX is at 100%.
 - The snare transient is captured and fired four times within the 1/4-note window,
   producing a drum-machine roll effect.
 - Patch an S&H random CV to RCH CV to randomise the subdivision per hit.
+
+**Lo-fi crunch stutter**
+- Set B=8 (8-bit), Smp=4 (5× decimation), MOD = `FWD`, DIV = 1/16.
+- Gate HLD briefly on drum hits.
+- The captured slice plays back with heavy bit and sample-rate reduction —
+  classic circuit-bent, Game Boy style degradation.
+- Patch a random CV to B CV or Smp CV to make each stutter unpredictably crushed.
+
+**Time-shifted freeze**
+- Set O=4 (reach back 4 slices), MOD = `REV`, MIX = 80%.
+- Enable manual hold (AuxButton).
+- Audio plays backwards from a point 4 slices behind the live position —
+  useful when the most recent slice contains a transient you want to avoid.
 
 **CV-morphing glitch**
 - Set MOD = `FWD`, patch a slow random voltage (e.g. a Turing Machine output) to
