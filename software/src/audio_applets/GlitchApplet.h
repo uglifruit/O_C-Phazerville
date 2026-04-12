@@ -101,81 +101,93 @@ public:
             return;
         }
 
-        // ── Line 1 (y=15): Clock source + Division ──────────────────────
-        gfxPos(1, 15);
-        gfxStartCursor();
-        gfxPrint(clock_source);
-        gfxEndCursor(cursor == CLOCK_SRC, false, clock_source.InputName());
+        for (int i = 0; i < 6; ++i) {
+            int row = scroll_top + i;
+            if (row >= NUM_ROWS) break;
+            DrawRow(row, 15 + i * 8);
+        }
 
-        gfxStartCursor();
-        gfxPrint(DIV_NAMES[div]);
-        gfxEndCursor(cursor == DIV);
-
-        // ── Line 2 (y=23): Hold source ───────────────────────────────────
-        gfxPrint(1, 23, "Hld:");
-        if (manual_hold_) gfxInvert(1, 23, 24, 8); // indicate latched hold
-        gfxStartCursor();
-        gfxPrint(hold_input);
-        gfxEndCursor(cursor == HOLD_SRC, false, hold_input.InputName());
-
-        // ── Line 3 (y=31): Playback mode + CV ────────────────────────────
-        gfxPrint(1, 31, "Mod:");
-        gfxStartCursor();
-        gfxPrint(MODE_NAMES[mode]);
-        gfxEndCursor(cursor == MODE);
-
-        gfxStartCursor();
-        gfxPrint(mode_cv);
-        gfxEndCursor(cursor == MODE_CV, false, mode_cv.InputName());
-
-        // ── Line 4 (y=39): Ratchet count + CV (always visible) ───────────
-        gfxPrint(1, 39, "Rch:");
-        gfxStartCursor();
-        gfxPrint(ratchet);
-        gfxEndCursor(cursor == RATCHET);
-
-        gfxStartCursor();
-        gfxPrint(ratchet_cv);
-        gfxEndCursor(cursor == RATCHET_CV, false, ratchet_cv.InputName());
-
-        // ── Line 5 (y=47): Bit / Spl / Off (hex, each with CV dot) ───────
-        // Format: B[0-F][./∗]S[0-F][./∗]O[0-F][./∗]  — 9 chars, ~54px
-        gfxPos(1, 47);
-        gfxPrint("B");
-        gfxStartCursor();
-        graphics.printf("%X", bits_);
-        gfxEndCursor(cursor == BITS);
-        gfxStartCursor();
-        gfxPrint(bits_cv.source ? "*" : ".");
-        gfxEndCursor(cursor == BITS_CV, false, bits_cv.InputName());
-
-        gfxPrint("S");
-        gfxStartCursor();
-        graphics.printf("%X", decimate_);
-        gfxEndCursor(cursor == DECIMATE);
-        gfxStartCursor();
-        gfxPrint(dec_cv.source ? "*" : ".");
-        gfxEndCursor(cursor == DECIMATE_CV, false, dec_cv.InputName());
-
-        gfxPrint("O");
-        gfxStartCursor();
-        graphics.printf("%X", offset_);
-        gfxEndCursor(cursor == OFFSET);
-        gfxStartCursor();
-        gfxPrint(off_cv.source ? "*" : ".");
-        gfxEndCursor(cursor == OFFSET_CV, false, off_cv.InputName());
-
-        // ── Line 6 (y=55): Mix + CV ──────────────────────────────────────
-        gfxPrint(1, 55, "Mix:");
-        gfxStartCursor();
-        graphics.printf("%3d%%", mix);
-        gfxEndCursor(cursor == MIX);
-
-        gfxStartCursor();
-        gfxPrint(mix_cv);
-        gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+        if (scroll_top > 0)
+            gfxIcon(57, 14, UP_ICON);
+        if (scroll_top + 6 < NUM_ROWS)
+            gfxIcon(57, 56, DOWN_ICON);
 
         gfxDisplayInputMapEditor();
+    }
+
+    FLASHMEM void DrawRow(int row, int y) {
+        switch (row) {
+            case 0:
+                gfxPos(1, y);
+                gfxStartCursor();
+                gfxPrint(clock_source);
+                gfxEndCursor(cursor == CLOCK_SRC, false, clock_source.InputName());
+                gfxStartCursor();
+                gfxPrint(DIV_NAMES[div]);
+                gfxEndCursor(cursor == DIV);
+                break;
+            case 1:
+                gfxPrint(1, y, "Hld:");
+                if (manual_hold_) gfxInvert(1, y, 24, 8);
+                gfxStartCursor();
+                gfxPrint(hold_input);
+                gfxEndCursor(cursor == HOLD_SRC, false, hold_input.InputName());
+                break;
+            case 2:
+                gfxPrint(1, y, "Mod:");
+                gfxStartCursor();
+                gfxPrint(MODE_NAMES[mode]);
+                gfxEndCursor(cursor == MODE);
+                gfxStartCursor();
+                gfxPrint(mode_cv);
+                gfxEndCursor(cursor == MODE_CV, false, mode_cv.InputName());
+                break;
+            case 3:
+                gfxPrint(1, y, "Rch:");
+                gfxStartCursor();
+                gfxPrint(ratchet);
+                gfxEndCursor(cursor == RATCHET);
+                gfxStartCursor();
+                gfxPrint(ratchet_cv);
+                gfxEndCursor(cursor == RATCHET_CV, false, ratchet_cv.InputName());
+                break;
+            case 4:
+                gfxPrint(1, y, "Bit:");
+                gfxStartCursor(25, y);
+                graphics.printf("%X", bits_);
+                gfxEndCursor(cursor == BITS);
+                gfxStartCursor();
+                gfxPrint(bits_cv);
+                gfxEndCursor(cursor == BITS_CV, false, bits_cv.InputName());
+                break;
+            case 5:
+                gfxPrint(1, y, "Smp:");
+                gfxStartCursor(25, y);
+                graphics.printf("%X", decimate_);
+                gfxEndCursor(cursor == DECIMATE);
+                gfxStartCursor();
+                gfxPrint(dec_cv);
+                gfxEndCursor(cursor == DECIMATE_CV, false, dec_cv.InputName());
+                break;
+            case 6:
+                gfxPrint(1, y, "Off:");
+                gfxStartCursor(25, y);
+                graphics.printf("%X", offset_);
+                gfxEndCursor(cursor == OFFSET);
+                gfxStartCursor();
+                gfxPrint(off_cv);
+                gfxEndCursor(cursor == OFFSET_CV, false, off_cv.InputName());
+                break;
+            case 7:
+                gfxPrint(1, y, "Mix:");
+                gfxStartCursor(25, y);
+                graphics.printf("%3d%%", mix);
+                gfxEndCursor(cursor == MIX);
+                gfxStartCursor();
+                gfxPrint(mix_cv);
+                gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
+                break;
+        }
     }
 
     // AuxButton latches/unlatches manual hold for performance without a patch.
@@ -202,6 +214,10 @@ public:
     FLASHMEM void OnEncoderMove(int direction) override {
         if (!EditMode()) {
             cursor = (Cursor)constrain(cursor + direction, 0, CURSOR_LENGTH - 1);
+            int row = cursorToRow(cursor);
+            if (row < scroll_top) scroll_top = row;
+            else if (row >= scroll_top + 6) scroll_top = row - 5;
+            scroll_top = constrain(scroll_top, 0, NUM_ROWS - 6);
             return;
         }
         if (EditSelectedInputMap(direction)) return;
@@ -252,6 +268,7 @@ protected:
 private:
     static const uint8_t NUM_DIVS  = 8;
     static const uint8_t NUM_MODES = 4;
+    static const int     NUM_ROWS  = 8;
     static const uint8_t MODE_RATCHET = AudioEffectGlitch::MODE_RATCHET;
 
     static constexpr const char* DIV_NAMES[] = {
@@ -281,7 +298,19 @@ private:
         CURSOR_LENGTH,
     };
 
-    Cursor cursor = DIV;
+    Cursor cursor     = DIV;
+    int8_t scroll_top = 0;
+
+    int8_t cursorToRow(int8_t c) const {
+        if (c <= DIV)         return 0;
+        if (c == HOLD_SRC)    return 1;
+        if (c <= MODE_CV)     return 2;
+        if (c <= RATCHET_CV)  return 3;
+        if (c <= BITS_CV)     return 4;
+        if (c <= DECIMATE_CV) return 5;
+        if (c <= OFFSET_CV)   return 6;
+        return 7;
+    }
 
     // Parameters
     DigitalInputMap clock_source;
