@@ -69,6 +69,7 @@ public:
         // Snapshot volatile params once per block to ensure consistency
         // within the sample loop.
         const bool    cur_hold     = hold_;
+        const bool    cur_freeze   = freeze_;
         const size_t  cur_slice    = slice_samples_;
         const uint8_t cur_mode     = mode_;
         const uint8_t cur_ratchet  = ratchet_;
@@ -96,11 +97,12 @@ public:
         was_held_ = cur_hold;
 
         // Record incoming audio unless freeze is active.
-        if (in && !freeze_) g_buffer.Write(in);
+        if (in && !cur_freeze) g_buffer.Write(in);
 
-        // LIVE FX mode: FWD + offset=0 + hold routes live audio through bit crush /
-        // sample decimation directly, ignoring div and slice logic entirely.
-        if (cur_mode == MODE_FWD && cur_offset == 0 && cur_hold) {
+        // LIVE FX mode: FWD + offset=0 + hold (and not frozen) routes live audio
+        // through bit crush / sample decimation directly, ignoring div/slice logic.
+        // When frozen, fall through to the stutter path which reads the frozen buffer.
+        if (cur_mode == MODE_FWD && cur_offset == 0 && cur_hold && !cur_freeze) {
             const size_t dec_factor = (size_t)cur_decimate + 1;
             if (in) {
                 for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {

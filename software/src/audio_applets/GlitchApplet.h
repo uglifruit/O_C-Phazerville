@@ -128,20 +128,19 @@ public:
                 gfxPrint(DIV_NAMES[div]);
                 gfxEndCursor(cursor == DIV);
                 break;
-            case 1:
-                gfxPrint(1, y, "Hld:");
-                if (manual_hold_) gfxInvert(1, y, 24, 8);
+            case 1: // ON: [hold]  FZ:[freeze] — both on one row
+                gfxPos(1, y);
+                gfxPrint("ON:");
+                if (manual_hold_) gfxInvert(1, y, 18, 8);
                 gfxStartCursor();
                 gfxPrint(hold_input);
                 gfxEndCursor(cursor == HOLD_SRC, false, hold_input.InputName());
-                break;
-            case 2:
-                gfxPrint(1, y, "Frz:");
+                gfxPrint("FZ:");
                 gfxStartCursor();
                 gfxPrint(freeze_input);
                 gfxEndCursor(cursor == FREEZE_SRC, false, freeze_input.InputName());
                 break;
-            case 3:
+            case 2:
                 gfxPrint(1, y, "Mod:");
                 gfxStartCursor();
                 gfxPrint(MODE_NAMES[mode]);
@@ -150,7 +149,7 @@ public:
                 gfxPrint(mode_cv);
                 gfxEndCursor(cursor == MODE_CV, false, mode_cv.InputName());
                 break;
-            case 4:
+            case 3:
                 gfxPrint(1, y, "Rch:");
                 gfxStartCursor();
                 gfxPrint(ratchet);
@@ -159,34 +158,34 @@ public:
                 gfxPrint(ratchet_cv);
                 gfxEndCursor(cursor == RATCHET_CV, false, ratchet_cv.InputName());
                 break;
-            case 5:
+            case 4:
                 gfxPrint(1, y, "Bit:");
                 gfxStartCursor(25, y);
-                graphics.printf("%2d", bits_);
+                graphics.printf("%4d", bits_);
                 gfxEndCursor(cursor == BITS);
                 gfxStartCursor();
                 gfxPrint(bits_cv);
                 gfxEndCursor(cursor == BITS_CV, false, bits_cv.InputName());
                 break;
-            case 6:
+            case 5:
                 gfxPrint(1, y, "Smp:");
                 gfxStartCursor(25, y);
-                graphics.printf("%2d", decimate_);
+                graphics.printf("%4d", decimate_);
                 gfxEndCursor(cursor == DECIMATE);
                 gfxStartCursor();
                 gfxPrint(dec_cv);
                 gfxEndCursor(cursor == DECIMATE_CV, false, dec_cv.InputName());
                 break;
-            case 7:
+            case 6:
                 gfxPrint(1, y, "Off:");
                 gfxStartCursor(25, y);
-                graphics.printf("%2d", offset_);
+                graphics.printf("%4d", offset_);
                 gfxEndCursor(cursor == OFFSET);
                 gfxStartCursor();
                 gfxPrint(off_cv);
                 gfxEndCursor(cursor == OFFSET_CV, false, off_cv.InputName());
                 break;
-            case 8:
+            case 7:
                 gfxPrint(1, y, "Mix:");
                 gfxStartCursor(25, y);
                 graphics.printf("%3d%%", mix);
@@ -241,11 +240,11 @@ public:
             case MODE_CV:     mode_cv.ChangeSource(direction); break;
             case RATCHET:     ratchet = constrain(ratchet + direction, 1, 6); break;
             case RATCHET_CV:  ratchet_cv.ChangeSource(direction); break;
-            case BITS:        bits_    = (bits_     + direction) & 0x0F; break;
+            case BITS:        bits_    = (uint8_t)constrain((int)bits_    + direction, 0, 15); break;
             case BITS_CV:     bits_cv.ChangeSource(direction); break;
-            case DECIMATE:    decimate_= (decimate_ + direction) & 0x0F; break;
+            case DECIMATE:    decimate_= (uint8_t)constrain((int)decimate_+ direction, 0, 15); break;
             case DECIMATE_CV: dec_cv.ChangeSource(direction); break;
-            case OFFSET:      offset_  = (offset_   + direction) & 0x0F; break;
+            case OFFSET:      offset_  = (uint8_t)constrain((int)offset_  + direction, 0, 15); break;
             case OFFSET_CV:   off_cv.ChangeSource(direction); break;
             case MIX:         mix = constrain(mix + direction, 0, 100); break;
             case MIX_CV:      mix_cv.ChangeSource(direction); break;
@@ -279,7 +278,7 @@ protected:
 private:
     static const uint8_t NUM_DIVS  = 8;
     static const uint8_t NUM_MODES = 4;
-    static const int     NUM_ROWS  = 9;
+    static const int     NUM_ROWS  = 8;
     static const uint8_t MODE_RATCHET = AudioEffectGlitch::MODE_RATCHET;
 
     static constexpr const char* DIV_NAMES[] = {
@@ -315,14 +314,13 @@ private:
 
     int8_t cursorToRow(int8_t c) const {
         if (c <= DIV)         return 0;
-        if (c == HOLD_SRC)    return 1;
-        if (c == FREEZE_SRC)  return 2;
-        if (c <= MODE_CV)     return 3;
-        if (c <= RATCHET_CV)  return 4;
-        if (c <= BITS_CV)     return 5;
-        if (c <= DECIMATE_CV) return 6;
-        if (c <= OFFSET_CV)   return 7;
-        return 8;
+        if (c <= FREEZE_SRC)  return 1; // HOLD_SRC and FREEZE_SRC share row 1
+        if (c <= MODE_CV)     return 2;
+        if (c <= RATCHET_CV)  return 3;
+        if (c <= BITS_CV)     return 4;
+        if (c <= DECIMATE_CV) return 5;
+        if (c <= OFFSET_CV)   return 6;
+        return 7;
     }
 
     // Parameters
