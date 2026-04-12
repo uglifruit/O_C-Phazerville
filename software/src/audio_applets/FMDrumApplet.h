@@ -11,7 +11,7 @@ public:
     AudioStream* InputStream()  override { return &input_stream; }
     AudioStream* OutputStream() override { return &output_mixer; }
 
-    void Start() override {
+    FLASHMEM void Start() override {
         // Acquire interpolating streams
         fm_idx_stream.Acquire();
         fm_idx_stream.Method(INTERPOLATION_LINEAR);
@@ -80,7 +80,7 @@ public:
         noise_env_stream.Push(float_to_q15(0.0f));
     }
 
-    void Unload() override {
+    FLASHMEM void Unload() override {
         fm_idx_stream.Release();
         amp_env_stream.Release();
         noise_env_stream.Release();
@@ -117,12 +117,13 @@ public:
             (float)mix + Proportion(mix_cv.In(), HEMISPHERE_MAX_INPUT_CV, 100),
             0.f, 100.f);
 
-        // --- Per-block decay coefficients ---
+        // --- Per-block decay coefficients (recalculate only when effective value changes) ---
         // coeff = exp(-AUDIO_BLOCK_SAMPLES / (decay_s * AUDIO_SAMPLE_RATE_EXACT))
-        const float sr = AUDIO_SAMPLE_RATE_EXACT;
-        float amp_coeff   = expf(-128.f / (eff_dec * 0.001f * sr));
-        float fm_coeff    = expf(-128.f / (eff_fmd * 0.001f * sr));
-        float noise_coeff = expf(-128.f / (eff_ndc * 0.001f * sr));
+        // Uses fastexp (bit-manipulation) instead of stdlib expf to avoid math.h linkage.
+        static const float kExpFactor = 128000.f / AUDIO_SAMPLE_RATE_EXACT;
+        if (eff_dec != prev_eff_dec) { amp_coeff   = fastexp(-kExpFactor / eff_dec); prev_eff_dec = eff_dec; }
+        if (eff_fmd != prev_eff_fmd) { fm_coeff    = fastexp(-kExpFactor / eff_fmd); prev_eff_fmd = eff_fmd; }
+        if (eff_ndc != prev_eff_ndc) { noise_coeff = fastexp(-kExpFactor / eff_ndc); prev_eff_ndc = eff_ndc; }
 
         // --- Trigger detection ---
         if (trg.Clock()) {
@@ -154,14 +155,14 @@ public:
         noise_env_stream.Push(
             float_to_q15(constrain(noise_env, 0.f, 1.f)));
 
-        // --- Mixer gains for noise and passthrough ---
-        output_mixer.gain(1, constrain(eff_noi * 0.01f, 0.f, 2.f));
-        output_mixer.gain(2, constrain(eff_mix * 0.01f, 0.f, 1.f));
+        // --- Mixer gains: drum scales with mix, passthrough inversely ---
+        float mix_gain = eff_mix * 0.01f;
+        output_mixer.gain(0, mix_gain);
+        output_mixer.gain(1, constrain(eff_noi * mix_gain * 0.01f, 0.f, 2.f));
+        output_mixer.gain(2, constrain((100.f - eff_mix) * 0.01f, 0.f, 1.f));
     }
 
-    void View() override {
-        // Header
-        gfxPrint(1, 2, "FMDrum");
+    FLASHMEM void View() override {
         if (trigger_flash)
             gfxIcon(56, 2, ZAP_ICON);
 
@@ -181,7 +182,7 @@ public:
         gfxDisplayInputMapEditor();
     }
 
-    void OnEncoderMove(int direction) override {
+    FLASHMEM void OnEncoderMove(int direction) override {
         if (!EditMode()) {
             MoveCursor(cursor, direction, NUM_CURSORS - 1);
             // Scroll to keep active row visible
@@ -205,13 +206,13 @@ public:
                 LoadPreset(preset_idx);
                 break;
             case PIT:    pitch_hz = constrain(pitch_hz + direction * 5, 10, 2000); break;
-            case DCY:    dec      = constrain(dec + direction * 5, 10, 2000); break;
+            case DCY:    dec      = constrain(dec + direction * 5, 10, 4000); break;
             case SWP:    swp      = constrain(swp + direction, 0, 100); break;
             case RTO:    rto      = constrain(rto + direction, 1, 100); break;
             case FMI:    fmi      = constrain(fmi + direction, 0, 100); break;
             case FMD:    fmd_s    = constrain(fmd_s + direction, 1, 100); break;
             case NOI:    noi      = constrain(noi + direction, 0, 100); break;
-            case NDC:    ndc      = constrain(ndc + direction * 5, 5, 1000); break;
+            case NDC:    ndc      = constrain(ndc + direction * 5, 5, 2000); break;
             case MIX:    mix      = constrain(mix + direction, 0, 100); break;
             case CV_PIT: pitch_cv.ChangeSource(direction); break;
             case CV_DCY: dec_cv.ChangeSource(direction);   break;
@@ -226,9 +227,9 @@ public:
         }
     }
 
-    void OnButtonPress() override {
-        if (cursor == TRG) { CursorToggle(); return; }
+    FLASHMEM void OnButtonPress() override {
         if (CheckEditInputMapPress(cursor,
+              IndexedInput(TRG,    trg),
               IndexedInput(CV_PIT, pitch_cv),
               IndexedInput(CV_DCY, dec_cv),
               IndexedInput(CV_SWP, swp_cv),
@@ -242,19 +243,19 @@ public:
         CursorToggle();
     }
 
-    void AuxButton() override {
+    FLASHMEM void AuxButton() override {
         preset_idx = (preset_idx + 1) % (NUM_PRESETS + 1);
         LoadPreset(preset_idx);
     }
 
-    void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(pitch_hz, dec, swp, rto, fmi, fmd_s);
         data[1] = PackPackables(noi, ndc, mix, trg, mix_cv);
         data[2] = PackPackables(pitch_cv, dec_cv, swp_cv, rto_cv);
         data[3] = PackPackables(fmi_cv, fmd_cv, noi_cv, ndc_cv);
     }
 
-    void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], pitch_hz, dec, swp, rto, fmi, fmd_s);
         UnpackPackables(data[1], noi, ndc, mix, trg, mix_cv);
         UnpackPackables(data[2], pitch_cv, dec_cv, swp_cv, rto_cv);
@@ -262,7 +263,7 @@ public:
     }
 
 protected:
-    void SetHelp() override {}
+    FLASHMEM void SetHelp() override {}
 
 private:
     enum Cursor : int8_t {
@@ -296,7 +297,7 @@ private:
     int8_t  fmd_s    = 20;   // 1..100 (×10 = 10..1000 ms)
     int8_t  noi      = 20;   // 0..100 %
     int16_t ndc      = 80;   // 5..1000 ms
-    int8_t  mix      = 0;    // 0..100 %
+    int8_t  mix      = 100;  // 0..100 % (100 = drum only, 0 = full passthrough)
 
     DigitalInputMap trg;
     CVInputMap pitch_cv, dec_cv, swp_cv, rto_cv;
@@ -306,6 +307,14 @@ private:
     float amp_env   = 0.0f;
     float fm_env    = 0.0f;
     float noise_env = 0.0f;
+
+    // --- Cached decay coefficients (recalculated only when effective value changes) ---
+    float amp_coeff   = 0.9999f;
+    float fm_coeff    = 0.9999f;
+    float noise_coeff = 0.9999f;
+    float prev_eff_dec = -1.f;
+    float prev_eff_fmd = -1.f;
+    float prev_eff_ndc = -1.f;
 
     // --- UI state ---
     int8_t  cursor      = TRG;
@@ -337,22 +346,23 @@ private:
         int8_t  fmd_s;
         int8_t  noi;
         int16_t ndc;
-        int8_t  mix;
         const char* name;
     };
 
-    static const int NUM_PRESETS = 6;
+    static const int NUM_PRESETS = 8;
     static constexpr FMDrumPreset PRESETS[NUM_PRESETS] = {
-        //        hz   dec  swp  rto  fmi  fmd noi  ndc  mix  name
-        {  60,   500,  80,  10,  90,  20,   5,  30,  0, "Kick"  },
-        { 160,    80,  15,  14,  70,   4,  90, 320,  0, "Snare" },
-        {1000,    60,   0,  35,  25,   3, 100, 100,  0, "HiHat" },
-        {1000,   350,   0,  35,  25,   8, 100, 750,  0, "O.Hat" },
-        { 120,   350,  60,  12,  70,  15,  15,  60,  0, "Tom"   },
-        { 300,    80,   5,   8,  40,   5,  90,  80,  0, "Clap"  },
+        //        hz   dec  swp  rto  fmi  fmd noi  ndc  name
+        {  60,   500,  80,  10,  90,  20,   5,  30, "Kick"  },
+        { 160,    80,  15,  14,  70,   4,  90, 320, "Snare" },
+        {1000,    60,   0,  35,  25,   3, 100, 100, "HiHat" },
+        {1000,   350,   0,  35,  25,   8, 100, 750, "O.Hat" },
+        { 120,   350,  60,  12,  70,  15,  15,  60, "Tom"   },
+        { 300,    80,   5,   8,  40,   5,  90,  80, "Clap"  },
+        { 500,   100,   0,  37,  90,   8,  10,  80, "Metal" },
+        { 562,   300,   0,  50,  80,  10,   5, 100, "Cowbl" },
     };
 
-    void LoadPreset(int idx) {
+    FLASHMEM void LoadPreset(int idx) {
         if (idx < NUM_PRESETS) {
             const auto& p = PRESETS[idx];
             pitch_hz = p.pitch_hz;
@@ -363,7 +373,6 @@ private:
             fmd_s    = p.fmd_s;
             noi      = p.noi;
             ndc      = p.ndc;
-            mix      = p.mix;
         } else {
             // Random
             pitch_hz = random(20, 800);
@@ -374,19 +383,18 @@ private:
             fmd_s    = random(2, 50);
             noi      = random(0, 80);
             ndc      = random(20, 300);
-            mix      = 0;
         }
     }
 
     // DrawRow renders a display row (by row index 0..NUM_ROWS-1).
     // Each param row shows value cursor then CV source cursor inline.
-    void DrawRow(int row, int y) {
+    FLASHMEM void DrawRow(int row, int y) {
         switch (row) {
             case 0: // TRG
                 gfxPrint(1, y, "TRG:");
                 gfxStartCursor(25, y);
                 gfxPrint(trg);
-                gfxEndCursor(cursor == TRG, false, trg.InputName());
+                gfxEndCursor(cursor == TRG, true, trg.InputName());
                 break;
             case 1: // PRESET
                 gfxPrint(1, y, "Type:");
