@@ -124,7 +124,7 @@ public:
                 gfxStartCursor();
                 gfxPrint(clock_source);
                 gfxEndCursor(cursor == CLOCK_SRC, false, clock_source.InputName());
-                gfxStartCursor();
+                gfxStartCursor(37, y);
                 gfxPrint(DIV_NAMES[div]);
                 gfxEndCursor(cursor == DIV);
                 break;
@@ -135,6 +135,7 @@ public:
                 gfxStartCursor();
                 gfxPrint(hold_input);
                 gfxEndCursor(cursor == HOLD_SRC, false, hold_input.InputName());
+                gfxPos(31, y);
                 gfxPrint("FZ:");
                 gfxStartCursor();
                 gfxPrint(freeze_input);
@@ -145,43 +146,43 @@ public:
                 gfxStartCursor();
                 gfxPrint(MODE_NAMES[mode]);
                 gfxEndCursor(cursor == MODE);
-                gfxStartCursor();
+                gfxStartCursor(49, y);
                 gfxPrint(mode_cv);
                 gfxEndCursor(cursor == MODE_CV, false, mode_cv.InputName());
                 break;
             case 3:
                 gfxPrint(1, y, "Rch:");
-                gfxStartCursor();
-                gfxPrint(ratchet);
+                gfxStartCursor(25, y);
+                graphics.printf("%2d", ratchet);
                 gfxEndCursor(cursor == RATCHET);
-                gfxStartCursor();
+                gfxStartCursor(49, y);
                 gfxPrint(ratchet_cv);
                 gfxEndCursor(cursor == RATCHET_CV, false, ratchet_cv.InputName());
                 break;
             case 4:
                 gfxPrint(1, y, "Bit:");
                 gfxStartCursor(25, y);
-                graphics.printf("%4d", bits_);
+                graphics.printf("%2d", bits_);
                 gfxEndCursor(cursor == BITS);
-                gfxStartCursor();
+                gfxStartCursor(49, y);
                 gfxPrint(bits_cv);
                 gfxEndCursor(cursor == BITS_CV, false, bits_cv.InputName());
                 break;
             case 5:
                 gfxPrint(1, y, "Smp:");
                 gfxStartCursor(25, y);
-                graphics.printf("%4d", decimate_);
+                graphics.printf("%2d", decimate_);
                 gfxEndCursor(cursor == DECIMATE);
-                gfxStartCursor();
+                gfxStartCursor(49, y);
                 gfxPrint(dec_cv);
                 gfxEndCursor(cursor == DECIMATE_CV, false, dec_cv.InputName());
                 break;
             case 6:
                 gfxPrint(1, y, "Off:");
                 gfxStartCursor(25, y);
-                graphics.printf("%4d", offset_);
+                graphics.printf("%2d", offset_);
                 gfxEndCursor(cursor == OFFSET);
-                gfxStartCursor();
+                gfxStartCursor(49, y);
                 gfxPrint(off_cv);
                 gfxEndCursor(cursor == OFFSET_CV, false, off_cv.InputName());
                 break;
@@ -190,7 +191,7 @@ public:
                 gfxStartCursor(25, y);
                 graphics.printf("%3d%%", mix);
                 gfxEndCursor(cursor == MIX);
-                gfxStartCursor();
+                gfxStartCursor(49, y);
                 gfxPrint(mix_cv);
                 gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
                 break;
@@ -208,7 +209,6 @@ public:
                 cursor,
                 IndexedInput(CLOCK_SRC,   clock_source),
                 IndexedInput(HOLD_SRC,    hold_input),
-                IndexedInput(FREEZE_SRC,  freeze_input),
                 IndexedInput(MODE_CV,     mode_cv),
                 IndexedInput(RATCHET_CV,  ratchet_cv),
                 IndexedInput(BITS_CV,     bits_cv),
