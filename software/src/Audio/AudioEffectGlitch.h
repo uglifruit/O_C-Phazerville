@@ -41,7 +41,8 @@ public:
     void Release() { g_buffer.Release(); }
     bool IsReady() const { return g_buffer.IsReady(); }
 
-    void setHold(bool h) { hold_ = h; }
+    void setHold(bool h)   { hold_   = h; }
+    void setFreeze(bool f) { freeze_ = f; }
 
     void setSliceSamples(size_t n) {
         size_t max_slice = g_buffer.NumSamples / 2;
@@ -94,9 +95,8 @@ public:
         }
         was_held_ = cur_hold;
 
-        // Always record incoming audio (buffer advances even while frozen so
-        // releasing hold returns to live audio without a stale gap).
-        if (in) g_buffer.Write(in);
+        // Record incoming audio unless freeze is active.
+        if (in && !freeze_) g_buffer.Write(in);
 
         // LIVE FX mode: FWD + offset=0 + hold routes live audio through bit crush /
         // sample decimation directly, ignoring div and slice logic entirely.
@@ -205,6 +205,7 @@ private:
 
     // Written from Controller() (ISR), read from update() (audio interrupt).
     volatile bool    hold_          = false;
+    volatile bool    freeze_        = false;
     volatile size_t  slice_samples_ = GLITCH_BUFFER_SAMPLES / 8; // 125ms default
     volatile uint8_t mode_          = MODE_FWD;
     volatile uint8_t ratchet_       = 2; // 1–6, used by MODE_RATCHET

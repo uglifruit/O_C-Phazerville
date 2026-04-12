@@ -59,7 +59,8 @@ public:
             clock_base_secs * DIV_BEATS[div] * AUDIO_SAMPLE_RATE);
 
         // Gate state: hardware gate OR latched manual hold.
-        bool held = hold_input.Gate() || manual_hold_;
+        bool held   = hold_input.Gate() || manual_hold_;
+        bool frozen = freeze_input.Gate();
 
         // CV-modulated mode and ratchet count.
         int eff_mode = constrain(
@@ -84,6 +85,7 @@ public:
 
         for (int ch = 0; ch < Channels; ch++) {
             channels[ch].glitch_stream.setHold(held);
+            channels[ch].glitch_stream.setFreeze(frozen);
             channels[ch].glitch_stream.setSliceSamples(slice_samples);
             channels[ch].glitch_stream.setMode(eff_mode);
             channels[ch].glitch_stream.setRatchet(eff_ratchet);
@@ -134,6 +136,12 @@ public:
                 gfxEndCursor(cursor == HOLD_SRC, false, hold_input.InputName());
                 break;
             case 2:
+                gfxPrint(1, y, "Frz:");
+                gfxStartCursor();
+                gfxPrint(freeze_input);
+                gfxEndCursor(cursor == FREEZE_SRC, false, freeze_input.InputName());
+                break;
+            case 3:
                 gfxPrint(1, y, "Mod:");
                 gfxStartCursor();
                 gfxPrint(MODE_NAMES[mode]);
@@ -142,7 +150,7 @@ public:
                 gfxPrint(mode_cv);
                 gfxEndCursor(cursor == MODE_CV, false, mode_cv.InputName());
                 break;
-            case 3:
+            case 4:
                 gfxPrint(1, y, "Rch:");
                 gfxStartCursor();
                 gfxPrint(ratchet);
@@ -151,34 +159,34 @@ public:
                 gfxPrint(ratchet_cv);
                 gfxEndCursor(cursor == RATCHET_CV, false, ratchet_cv.InputName());
                 break;
-            case 4:
+            case 5:
                 gfxPrint(1, y, "Bit:");
                 gfxStartCursor(25, y);
-                graphics.printf("%X", bits_);
+                graphics.printf("%2d", bits_);
                 gfxEndCursor(cursor == BITS);
                 gfxStartCursor();
                 gfxPrint(bits_cv);
                 gfxEndCursor(cursor == BITS_CV, false, bits_cv.InputName());
                 break;
-            case 5:
+            case 6:
                 gfxPrint(1, y, "Smp:");
                 gfxStartCursor(25, y);
-                graphics.printf("%X", decimate_);
+                graphics.printf("%2d", decimate_);
                 gfxEndCursor(cursor == DECIMATE);
                 gfxStartCursor();
                 gfxPrint(dec_cv);
                 gfxEndCursor(cursor == DECIMATE_CV, false, dec_cv.InputName());
                 break;
-            case 6:
+            case 7:
                 gfxPrint(1, y, "Off:");
                 gfxStartCursor(25, y);
-                graphics.printf("%X", offset_);
+                graphics.printf("%2d", offset_);
                 gfxEndCursor(cursor == OFFSET);
                 gfxStartCursor();
                 gfxPrint(off_cv);
                 gfxEndCursor(cursor == OFFSET_CV, false, off_cv.InputName());
                 break;
-            case 7:
+            case 8:
                 gfxPrint(1, y, "Mix:");
                 gfxStartCursor(25, y);
                 graphics.printf("%3d%%", mix);
@@ -200,6 +208,8 @@ public:
         if (CheckEditInputMapPress(
                 cursor,
                 IndexedInput(CLOCK_SRC,   clock_source),
+                IndexedInput(HOLD_SRC,    hold_input),
+                IndexedInput(FREEZE_SRC,  freeze_input),
                 IndexedInput(MODE_CV,     mode_cv),
                 IndexedInput(RATCHET_CV,  ratchet_cv),
                 IndexedInput(BITS_CV,     bits_cv),
@@ -226,6 +236,7 @@ public:
             case CLOCK_SRC:   clock_source.ChangeSource(direction); break;
             case DIV:         div = constrain(div + direction, 0, NUM_DIVS - 1); break;
             case HOLD_SRC:    hold_input.ChangeSource(direction); break;
+            case FREEZE_SRC:  freeze_input.ChangeSource(direction); break;
             case MODE:        mode = constrain(mode + direction, 0, NUM_MODES - 1); break;
             case MODE_CV:     mode_cv.ChangeSource(direction); break;
             case RATCHET:     ratchet = constrain(ratchet + direction, 1, 6); break;
@@ -246,14 +257,14 @@ public:
                        pack<4>(bits_), pack<4>(decimate_), pack<4>(offset_)
     FLASHMEM void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(GLITCH_PARAMS);
-        data[1] = PackPackables(clock_source, hold_input, mix_cv);
+        data[1] = PackPackables(clock_source, hold_input, freeze_input, mix_cv);
         data[2] = PackPackables(mode_cv, ratchet_cv, bits_cv, dec_cv); // 4×16=64 bits
         data[3] = PackPackables(off_cv);
     }
 
     FLASHMEM void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], GLITCH_PARAMS);
-        UnpackPackables(data[1], clock_source, hold_input, mix_cv);
+        UnpackPackables(data[1], clock_source, hold_input, freeze_input, mix_cv);
         UnpackPackables(data[2], mode_cv, ratchet_cv, bits_cv, dec_cv);
         UnpackPackables(data[3], off_cv);
     }
@@ -268,7 +279,7 @@ protected:
 private:
     static const uint8_t NUM_DIVS  = 8;
     static const uint8_t NUM_MODES = 4;
-    static const int     NUM_ROWS  = 8;
+    static const int     NUM_ROWS  = 9;
     static const uint8_t MODE_RATCHET = AudioEffectGlitch::MODE_RATCHET;
 
     static constexpr const char* DIV_NAMES[] = {
@@ -283,6 +294,7 @@ private:
         CLOCK_SRC = 0,
         DIV,
         HOLD_SRC,
+        FREEZE_SRC,
         MODE,
         MODE_CV,
         RATCHET,
@@ -304,18 +316,20 @@ private:
     int8_t cursorToRow(int8_t c) const {
         if (c <= DIV)         return 0;
         if (c == HOLD_SRC)    return 1;
-        if (c <= MODE_CV)     return 2;
-        if (c <= RATCHET_CV)  return 3;
-        if (c <= BITS_CV)     return 4;
-        if (c <= DECIMATE_CV) return 5;
-        if (c <= OFFSET_CV)   return 6;
-        return 7;
+        if (c == FREEZE_SRC)  return 2;
+        if (c <= MODE_CV)     return 3;
+        if (c <= RATCHET_CV)  return 4;
+        if (c <= BITS_CV)     return 5;
+        if (c <= DECIMATE_CV) return 6;
+        if (c <= OFFSET_CV)   return 7;
+        return 8;
     }
 
     // Parameters
     DigitalInputMap clock_source;
     uint8_t  div     = 5;   // default 1/16
     DigitalInputMap hold_input;
+    DigitalInputMap freeze_input;
     uint8_t  mode    = 0;   // 0=FWD, 1=REV, 2=PING, 3=RAT
     CVInputMap mode_cv;
     uint8_t  ratchet = 2;   // 1–6 subdivisions
