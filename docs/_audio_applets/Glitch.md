@@ -1,7 +1,7 @@
 ---
 layout: default
 ---
-# Glitch (mono / stereo)
+# Glitch (mono)
 
 TODO: screenshot
 
