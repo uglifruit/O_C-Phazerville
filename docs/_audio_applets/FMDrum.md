@@ -103,3 +103,4 @@ All presets default to Mix=100% (no audio passthrough).
 | File | Purpose |
 |------|---------|
 | `audio_applets/FMDrumApplet.h` | Complete applet — DSP signal graph, envelopes, UI, and presets |
+
