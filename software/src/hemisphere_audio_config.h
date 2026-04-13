@@ -21,6 +21,7 @@
 #include "audio_applets/FMDrumApplet.h"
 #include "audio_applets/GlitchApplet.h"
 #include "audio_applets/MistApplet.h"
+#include "audio_applets/AdvKrpsStrngApplet.h"
 
 const size_t NUM_SLOTS = 5;
 
@@ -34,7 +35,8 @@ DMAMEM std::tuple<
   UpsampledApplet<MONO>,
   OscApplet,
   FMDrumApplet,
-  WavPlayerApplet<MONO>>
+  WavPlayerApplet<MONO>,
+  AdvKrpsStrngApplet>
     mono_input_pool[2];
 DMAMEM std::tuple<
   InputApplet<STEREO>,
@@ -57,7 +59,8 @@ DMAMEM std::tuple<
   DynamicsApplet<MONO>,
   UpsampledApplet<MONO>,
   GlitchApplet<MONO>,
-  MistApplet<MONO>>
+  MistApplet<MONO>,
+  AdvKrpsStrngApplet>
     mono_processors_pool[2][NUM_SLOTS - 1];
 DMAMEM std::tuple<
   PassthruApplet<STEREO>,
