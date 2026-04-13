@@ -6,6 +6,7 @@
 // definitions in a translation unit do not have this problem.
 
 #include "synth_advanced_karplus.h"
+#ifdef ARDUINO_TEENSY41
 
 // --- Lifecycle -----------------------------------------------------------
 
@@ -133,3 +134,5 @@ FLASHMEM __attribute__((noinline)) void AudioSynthAdvancedKarplus::updateCore() 
     transmit(out);
     release(out);
 }
+
+#endif // ARDUINO_TEENSY41

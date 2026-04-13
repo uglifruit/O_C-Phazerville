@@ -1,4 +1,5 @@
 #pragma once
+#ifdef ARDUINO_TEENSY41
 
 // AudioSynthAdvancedKarplus — custom Karplus-Strong physical model
 //
@@ -125,3 +126,5 @@ private:
   // changes (i.e. from setFrequency() and setBrightness()).
   __attribute__((noinline)) void recalculateDelay();
 };
+
+#endif // ARDUINO_TEENSY41
