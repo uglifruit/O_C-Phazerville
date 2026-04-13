@@ -13,7 +13,6 @@
 #include "audio_applets/PassthruApplet.h"
 #include "audio_applets/UpsampledApplet.h"
 #include "audio_applets/VCAApplet.h"
-#include "audio_applets/WAVPlayerApplet.h"
 #include "audio_applets/HandSawApplet.h"
 #include "audio_applets/FreeverbApplet.h"
 #include "audio_applets/PhaserApplet.h"
@@ -35,13 +34,11 @@ DMAMEM std::tuple<
   UpsampledApplet<MONO>,
   OscApplet,
   FMDrumApplet,
-  WavPlayerApplet<MONO>,
   AdvKrpsStrngApplet>
     mono_input_pool[2];
 DMAMEM std::tuple<
   InputApplet<STEREO>,
   PassthruApplet<STEREO>,
-  WavPlayerApplet<STEREO>,
   UpsampledApplet<STEREO>>
     stereo_input_pool;
 DMAMEM std::tuple<
@@ -50,7 +47,6 @@ DMAMEM std::tuple<
   OscApplet,
   HandSawApplet,
   FMDrumApplet,
-  WavPlayerApplet<MONO>,
   VcaApplet<MONO>,
   LadderApplet<MONO>,
   FilterFolderApplet<MONO>,
@@ -73,7 +69,6 @@ DMAMEM std::tuple<
   LadderApplet<STEREO>,
   VcaApplet<STEREO>,
   FilterFolderApplet<STEREO>,
-  WavPlayerApplet<STEREO>,
   UpsampledApplet<STEREO>>
     stereo_processors_pool[NUM_SLOTS - 1];
 
