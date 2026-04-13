@@ -102,6 +102,7 @@
 #include "applets/VectorMod.h"
 #include "applets/VectorMorph.h"
 #include "applets/Voltage.h"
+#include "applets/MarkoV.h"
 #ifdef PEWPEWPEW
 #include "applets/WTVCO.h"
 #endif
@@ -195,6 +196,7 @@ AppletRegistry reg{
 #ifdef __IMXRT1062__
     DeclareApplet<MidiLoop>{81, 0x20},
 #endif
+    DeclareApplet<MarkoV>{93, 0x02},
     DeclareApplet<hMIDIIn>{150, 0x20},
     DeclareApplet<hMIDIOut>{27, 0x20},
 #ifdef PEWPEWPEW
