@@ -52,6 +52,7 @@ DMAMEM std::tuple<
   FilterFolderApplet<MONO>,
   DelayApplet<MONO>,
   PhazerApplet,
+  ReverbApplet,
   DynamicsApplet<MONO>,
   UpsampledApplet<MONO>,
   GlitchApplet<MONO>,
