@@ -20,6 +20,7 @@
 #include "audio_applets/ThreeBandz.h"
 #include "audio_applets/FMDrumApplet.h"
 #include "audio_applets/GlitchApplet.h"
+#include "audio_applets/MistApplet.h"
 
 const size_t NUM_SLOTS = 5;
 
@@ -53,10 +54,10 @@ DMAMEM std::tuple<
   FilterFolderApplet<MONO>,
   DelayApplet<MONO>,
   PhazerApplet,
-  ReverbApplet,
   DynamicsApplet<MONO>,
   UpsampledApplet<MONO>,
-  GlitchApplet<MONO>>
+  GlitchApplet<MONO>,
+  MistApplet<MONO>>
     mono_processors_pool[2][NUM_SLOTS - 1];
 DMAMEM std::tuple<
   PassthruApplet<STEREO>,
