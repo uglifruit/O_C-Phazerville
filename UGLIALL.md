@@ -20,6 +20,7 @@ Built automatically on every push by GitHub Actions. Grab the `.hex` from the re
 | GlitchApplet | Processor | Buffer glitch / stutter effect |
 | MistApplet | Processor | Granular processor |
 | AdvKrpsStrngApplet | Input + Processor | Custom Karplus-Strong physical model string |
+| WavRecorderApplet | Processor | SD card WAV recorder — 1 MB PSRAM ring buffer, R001–R999 filenames |
 | ReverbApplet | Processor | Freeverb reverb |
 | VcaApplet | Processor | |
 | LadderApplet | Processor | 4-pole Moog-style ladder filter |
