@@ -5,6 +5,9 @@ on:
     paths:
       - 'software/**'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -45,3 +48,32 @@ jobs:
         path: |
           software/*.hex
           software/.pio/build/*/*.hex
+
+    - name: Delete existing UGLIALL-latest release and tag
+      if: github.ref_name == 'UGLIALL-on-uglimods'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release delete UGLIALL-latest --repo ${{ github.repository }} --yes || true
+        git push origin :refs/tags/UGLIALL-latest || true
+
+    - name: Publish UGLIALL release
+      if: github.ref_name == 'UGLIALL-on-uglimods'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: UGLIALL-latest
+        name: UGLIALL Latest
+        body: |
+          Latest firmware build from the UGLIALL branch.
+
+          **Audio applets (T41 only):**
+          - FMDrum, Glitch, Mist (granular), AdvKrpsStrng (Karplus-Strong)
+          - WavRecorder — SD card WAV recorder with PSRAM ring buffer (T41 only, not T41+audio)
+
+          **CV applets:**
+          - MarkoV, MarkovPerc (sequencers)
+
+          Built from ${{ github.sha }}
+        prerelease: true
+        make_latest: true
+        files: software/.pio/build/*/*.hex
