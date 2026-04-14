@@ -58,8 +58,11 @@ DMAMEM std::tuple<
   UpsampledApplet<MONO>,
   GlitchApplet<MONO>,
   MistApplet<MONO>,
-  AdvKrpsStrngApplet,
-  WavRecorderApplet<MONO>>
+  AdvKrpsStrngApplet
+#ifndef USB_AUDIO
+  , WavRecorderApplet<MONO>
+#endif
+  >
     mono_processors_pool[2][NUM_SLOTS - 1];
 DMAMEM std::tuple<
   PassthruApplet<STEREO>,
@@ -72,8 +75,11 @@ DMAMEM std::tuple<
   LadderApplet<STEREO>,
   VcaApplet<STEREO>,
   FilterFolderApplet<STEREO>,
-  UpsampledApplet<STEREO>,
-  WavRecorderApplet<STEREO>>
+  UpsampledApplet<STEREO>
+#ifndef USB_AUDIO
+  , WavRecorderApplet<STEREO>
+#endif
+  >
     stereo_processors_pool[NUM_SLOTS - 1];
 
 // Helper to extract the tuple type from an array... thanks ChatGPT...

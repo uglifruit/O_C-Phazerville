@@ -56,7 +56,9 @@ If RAM1 overflows again, remove in this order:
 
 Do not remove FMDrum, Glitch, Mist, or AdvKrpsStrng.
 
-**FLASHMEM note:** FLASHMEM annotations inside `.h` files are silently ignored by LTO. The only way to get methods into Flash is to define them in a `.cpp` file. Only `synth_advanced_karplus.cpp` does this correctly — don't rely on FLASHMEM in headers.
+**FLASHMEM note:** FLASHMEM annotations inside `.h` files are silently ignored by LTO in **all** environments (T41, T41_audio, etc.) — both use `-DTEENSY_OPT_SMALLEST_CODE_LTO`. Confirmed empirically: annotating every cold-path method in WAVRecorderApplet produced zero change in RAM1/code size. The only way to get methods into Flash is to define them in a `.cpp` file. Only `synth_advanced_karplus.cpp` does this correctly — don't rely on FLASHMEM in headers.
+
+**WavRecorderApplet is excluded from T41_audio** via `#ifndef USB_AUDIO` guards in `hemisphere_audio_config.h`. The USB audio driver costs ~33 KB RAM1, leaving insufficient headroom for the applet's ~17 KB ITCM code.
 
 ---
 

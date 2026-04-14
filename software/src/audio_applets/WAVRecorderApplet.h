@@ -239,7 +239,7 @@ private:
     static const size_t RING_BYTES      = 1024 * 1024; // 1 MB PSRAM ring buffer
     static const size_t SD_WRITE_CHUNK  = 4096;         // 4 KB per SD write call
 
-    static const uint32_t WAV_SAMPLE_RATE = 44100;
+    static const uint32_t WAV_SAMPLE_RATE = (uint32_t)AUDIO_SAMPLE_RATE_EXACT; // 48000 on T4.1
     static const uint16_t WAV_BITS        = 16;
 
     enum WAVCursor : int { REC_CV = 0, NUM_PARAMS };

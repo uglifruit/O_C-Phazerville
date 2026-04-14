@@ -89,7 +89,7 @@ If the unit loses power during a recording, the `.WAV` file body contains valid 
 
 ### Notes
 
-- Files must be 16-bit PCM. Sample rate is always 44100 Hz to match the Teensy audio engine.
+- Files must be 16-bit PCM. Sample rate is always 48000 Hz to match the Teensy 4.1 audio engine.
 - Up to 999 recordings can be stored (`R001.WAV`–`R999.WAV`). The applet scans for the next free slot on load.
 - The applet occupies processor slots 1–4 only. It cannot be used as a source (slot 0).
 - In a dual-mono setup (WavRec on both left and right sides simultaneously), only the first instance to trigger will record. The other shows `LOCKED` until the first stops.

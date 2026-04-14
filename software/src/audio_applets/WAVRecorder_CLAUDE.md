@@ -114,6 +114,22 @@ The applet name in the selector header reads `WavRec*` (blinking `*`) while reco
 
 ---
 
+## T41_audio exclusion
+
+WavRecorderApplet is excluded from the `T41_audio` build via `#ifndef USB_AUDIO` guards around its entries in `mono_processors_pool` and `stereo_processors_pool` in `hemisphere_audio_config.h`. The `#include` at the top of that file is harmless.
+
+Reason: `T41_audio` adds the USB audio driver (~33 KB RAM1) on top of the T41 baseline, leaving ~8 KB headroom. WavRecorderApplet adds ~17 KB ITCM code, causing overflow.
+
+---
+
+## LTO and FLASHMEM
+
+**FLASHMEM is completely ignored by LTO in all Phazerville environments.** Both `T41` and `T41_audio` use `-DTEENSY_OPT_SMALLEST_CODE_LTO`. Under LTO, `__attribute__((section(".flashmem")))` in headers is silently dropped — the linker inlines across translation units and ignores section attributes. Confirmed empirically: annotating every cold-path method in WAVRecorderApplet produced **zero change** in RAM1/code size.
+
+The only working approach to place code in Flash is to define it in an explicit `.cpp` translation unit (see `synth_advanced_karplus.cpp`). FLASHMEM annotations in `.h` files are dead weight.
+
+---
+
 ## Known limitations / future work
 
 - **Power-off mid-recording:** WAV header size fields are 0; data is recoverable by hand.
