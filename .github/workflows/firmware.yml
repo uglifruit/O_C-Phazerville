@@ -76,4 +76,4 @@ jobs:
           Built from ${{ github.sha }}
         prerelease: true
         make_latest: true
-        files: software/.pio/build/*/*.hex
+        files: software/*.hex
