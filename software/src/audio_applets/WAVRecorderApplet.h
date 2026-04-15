@@ -43,7 +43,8 @@ public:
         for (int ch = 0; ch < Channels; ch++)
             PatchCable(passthru, ch, record_queue[ch], 0);
 
-        psram_buf = (int8_t*)extmem_calloc(RING_BYTES, 1);
+        ring_bytes = external_psram_size ? RING_BYTES_PSRAM : RING_BYTES_SRAM;
+        psram_buf  = (int8_t*)extmem_calloc(ring_bytes, 1);
         AllowRestart();
     }
 
@@ -164,6 +165,9 @@ public:
                 gfxPrint(1, 35, "OVERFLOW!");
             } else if (wav_recorder_sd_lock) {
                 gfxPrint(1, 35, "LOCKED");
+            } else if (!external_psram_size) {
+                gfxPrint(1, 35, "64KB buf");
+                gfxPrint(1, 44, "AUX/CV:rec");
             } else {
                 gfxPrint(1, 35, "AUX/CV:");
                 gfxPrint(1, 44, "rec/stop");
@@ -236,8 +240,9 @@ private:
     // Constants
     // -----------------------------------------------------------------------
 
-    static const size_t RING_BYTES      = 1024 * 1024; // 1 MB PSRAM ring buffer
-    static const size_t SD_WRITE_CHUNK  = 4096;         // 4 KB per SD write call
+    static const size_t RING_BYTES_PSRAM = 1024 * 1024; // 1 MB  — with PSRAM
+    static const size_t RING_BYTES_SRAM  =   64 * 1024; // 64 KB — internal RAM fallback
+    static const size_t SD_WRITE_CHUNK   = 4096;         // 4 KB per SD write call
 
     static const uint32_t WAV_SAMPLE_RATE = (uint32_t)AUDIO_SAMPLE_RATE_EXACT; // 48000 on T4.1
     static const uint16_t WAV_BITS        = 16;
@@ -257,6 +262,7 @@ private:
     // -----------------------------------------------------------------------
 
     int8_t* psram_buf      = nullptr;
+    size_t  ring_bytes     = RING_BYTES_PSRAM; // set in Start() based on PSRAM presence
     size_t  ring_write_pos = 0;
     size_t  ring_read_pos  = 0;
     size_t  ring_fill      = 0;
@@ -419,18 +425,18 @@ private:
 
     // Returns false (and sets overflow_flag) if the ring is full.
     bool RingWrite(const void* src, size_t len) {
-        if (ring_fill + len > RING_BYTES) {
+        if (ring_fill + len > ring_bytes) {
             overflow_flag = true;
             return false;
         }
         const uint8_t* s   = (const uint8_t*)src;
         uint8_t*       dst = (uint8_t*)psram_buf;
-        size_t avail = RING_BYTES - ring_write_pos;
+        size_t avail = ring_bytes - ring_write_pos;
 
         if (len <= avail) {
             memcpy(dst + ring_write_pos, s, len);
             ring_write_pos += len;
-            if (ring_write_pos == RING_BYTES) ring_write_pos = 0;
+            if (ring_write_pos == ring_bytes) ring_write_pos = 0;
         } else {
             memcpy(dst + ring_write_pos, s, avail);
             memcpy(dst, s + avail, len - avail);
@@ -492,12 +498,12 @@ private:
 
         while (ring_fill >= threshold) {
             size_t to_write = (ring_fill < SD_WRITE_CHUNK) ? ring_fill : SD_WRITE_CHUNK;
-            size_t avail    = RING_BYTES - ring_read_pos;
+            size_t avail    = ring_bytes - ring_read_pos;
 
             if (to_write <= avail) {
                 rec_file.write(src + ring_read_pos, to_write);
                 ring_read_pos += to_write;
-                if (ring_read_pos == RING_BYTES) ring_read_pos = 0;
+                if (ring_read_pos == ring_bytes) ring_read_pos = 0;
             } else {
                 rec_file.write(src + ring_read_pos, avail);
                 rec_file.write(src, to_write - avail);

@@ -29,7 +29,7 @@ The PSRAM buffer (`g_buffer`) is allocated lazily via `Acquire()`/`Release()` in
 
 ### Buffer
 
-`MistCircBuffer<int16_t>` is a thin wrapper over `ExtAudioBuffer<int16_t>` that exposes `GetWriteIx()` and `RawBuffer()` for absolute-position grain reads. Buffer lives in PSRAM (EXTMEM). Size: 1 second at 44100 Hz = 44100 samples = ~86 KB.
+`MistCircBuffer<int16_t>` is a thin wrapper over `ExtAudioBuffer<int16_t>` that exposes `GetWriteIx()` and `RawBuffer()` for absolute-position grain reads. Buffer lives in PSRAM (EXTMEM). Size: 1 second at 48000 Hz = 48000 samples = ~94 KB. On hardware without PSRAM, `MistChannel` halves the request to 24000 samples (~47 KB) so it fits in internal RAM — the applet remains fully functional with a shorter history window.
 
 ### Grain lifecycle
 
@@ -108,7 +108,7 @@ The T41 build is tight on RAM1 (512 KB holds both code and data). Mist is large 
 
 ### PSRAM (EXTMEM)
 
-The grain buffer itself is in PSRAM via `ExtAudioBuffer::Acquire()`. The audio applet tuple pools are `DMAMEM` (RAM2). Neither contributes to the RAM1 problem.
+The grain buffer is allocated via `ExtAudioBuffer::Acquire()` (called from `MistChannel::Start()`). The size passed to the constructor is chosen at object-creation time: `external_psram_size ? MIST_BUFFER_SAMPLES : MIST_BUFFER_SAMPLES / 2`. If allocation fails entirely (`IsReady()` returns false), `update()` passes audio through unchanged and `View()` shows "No PSRAM". The audio applet tuple pools are `DMAMEM` (RAM2). Neither contributes to the RAM1 problem.
 
 ---
 
