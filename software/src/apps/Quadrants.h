@@ -201,7 +201,8 @@ public:
         //audio_app.deletePresetData(id);
     }
 
-    void StoreToPreset(int id) {
+    void StoreToPreset(int id);
+    void store_to_preset(int id) {
         // preset id is upper 5 bits - 32 presets per bank
         uint16_t preset_key = id << 11;
 
@@ -311,7 +312,9 @@ public:
 
         preset_id = id;
     }
-    void LoadFromPreset(int id) {
+
+    void LoadFromPreset(int id);
+    void load_from_preset(int id) {
         preset_id = id;
 
         uint16_t preset_key = id << 11;
@@ -341,28 +344,14 @@ public:
         ClockSetup_instance.SetGlobals(global_data);
 
         // Input Mappings
-        if (!PhzConfig::getValue(preset_key | TRIGMAP_KEY, data)) {
-          PhzConfig::getValue(preset_key | OLD_TRIGMAP_KEY, data);
-          const size_t bitsize = 5;
-          for (size_t i = 0; i < 8; ++i) {
-            const int val = Unpack(data, PackLocation{i*bitsize, bitsize});
-            if (val != 0) HS::trigmap[i].source = constrain(val - 1, 0, TRIGMAP_MAX);
-          }
-        } else {
+        if (PhzConfig::getValue(preset_key | TRIGMAP_KEY, data)) {
           for (size_t i = 0; i < ADC_CHANNEL_LAST/4; ++i) {
             UnpackPackables(data, HS::trigmap[i*4], HS::trigmap[i*4+1], HS::trigmap[i*4+2], HS::trigmap[i*4+3]);
             if (!PhzConfig::getValue(preset_key | (TRIGMAP_KEY + i+1), data)) break;
           }
         }
 
-        if (!PhzConfig::getValue(preset_key | CVMAP_KEY, data)) {
-          PhzConfig::getValue(preset_key | OLD_CVMAP_KEY, data);
-          const size_t bitsize = 5;
-          for (size_t i = 0; i < 8; ++i) {
-            const int val = Unpack(data, PackLocation{i*bitsize, bitsize});
-            if (val != 0) HS::cvmap[i].source = constrain(val - 1, 0, CVMAP_MAX);
-          }
-        } else {
+        if (PhzConfig::getValue(preset_key | CVMAP_KEY, data)) {
           for (size_t i = 0; i < ADC_CHANNEL_LAST/4; ++i) {
             UnpackPackables(data, HS::cvmap[i*4], HS::cvmap[i*4+1], HS::cvmap[i*4+2], HS::cvmap[i*4+3]);
             if (!PhzConfig::getValue(preset_key | (CVMAP_KEY + i+1), data)) break;
@@ -496,9 +485,15 @@ public:
                 //continue;
             }
 
+            // receive it
             f.MIDIState.ProcessMIDIMsg({device.getChannel(), message, data1, data2});
-            next_device.send(message, data1, data2, device.getChannel(), 0);
-            dev3.send((midi::MidiType)message, data1, data2, device.getChannel());
+
+            // TODO: even more options for forwarding only certain traffic to certain places, etc.
+            if (HS::midi_thru_enabled) {
+              // send it along
+              next_device.send(message, data1, data2, device.getChannel(), 0);
+              dev3.send((midi::MidiType)message, data1, data2, device.getChannel());
+            }
         }
         if (load_slot >= 0 && load_slot < QUAD_PRESET_COUNT) {
             QueuePresetLoad(load_slot);
@@ -1060,6 +1055,7 @@ private:
         PRESET_JUMP_TRIG,
         MIDI_PC_CHANNEL,
         AUTO_MIDI,
+        MIDI_THRU_TOGGLE,
 
         // Input Remapping
         TRIGMAP1, TRIGMAP2, TRIGMAP3, TRIGMAP4,
@@ -1366,6 +1362,10 @@ private:
             HS::frame.autoMIDIOut = !HS::frame.autoMIDIOut;
             break;
 
+          case MIDI_THRU_TOGGLE:
+            HS::midi_thru_enabled = !HS::midi_thru_enabled;
+            break;
+
           case SHOWHIDELIST:
             if (h == 0) // left encoder inverts selection
             {
@@ -1517,6 +1517,9 @@ private:
         if (AUTO_MIDI == config_cursor) {
           gfxPrint(1, 55, "Auto MIDI-Out:  ");
           gfxPrint( OC::Strings::off_on[HS::frame.autoMIDIOut]);
+        } else if (MIDI_THRU_TOGGLE == config_cursor) {
+          gfxPrint(1, 55, "MIDI Thru:  ");
+          gfxPrint( OC::Strings::off_on[HS::midi_thru_enabled]);
         } else {
           const uint8_t pc_ch = HS::frame.MIDIState.pc_channel;
           gfxPrint(1, 55, "MIDI-PC Ch:   ");
@@ -1542,6 +1545,7 @@ private:
             if (isEditing) gfxInvert(82, 44, 45, 10);
             break;
         case AUTO_MIDI:
+        case MIDI_THRU_TOGGLE:
             gfxIcon(89, 55, RIGHT_ICON);
             break;
         case MIDI_PC_CHANNEL:
@@ -1677,6 +1681,7 @@ void AppQuadrants::Loop() {
     audio_app.mainloop();
 }
 
+FLASHMEM
 void AppQuadrants::DrawMenu() const {
     View();
 }
@@ -1704,6 +1709,7 @@ void AppQuadrants::DrawDebugInfo() const {
   // TODO:
 }
 
+FLASHMEM
 void AppQuadrants::HandleButtonEvent(const UI::Event &event) {
     last_mask = mask;
     mask = event.mask;
@@ -1858,6 +1864,16 @@ void AppQuadrants::HandleButtonEvent(const UI::Event &event) {
     }
 }
 
+FLASHMEM
 void AppQuadrants::HandleEncoderEvent(const UI::Event &event) {
     DelegateEncoderMovement(event);
+}
+
+FLASHMEM
+void AppQuadrants::StoreToPreset(int id) {
+  store_to_preset(id);
+}
+FLASHMEM
+void AppQuadrants::LoadFromPreset(int id) {
+  load_from_preset(id);
 }
