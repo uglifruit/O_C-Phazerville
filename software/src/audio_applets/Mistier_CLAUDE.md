@@ -99,13 +99,17 @@ BLEND_CV cursor   → underlines the CV assignment widget
 ### Cursor enum (in order)
 
 ```
-Page 1: POS, POS_CV, DENSITY, DENSITY_CV, SIZE, SIZE_CV, SPRAY, SPRAY_CV
-Page 2: PITCH, PITCH_CV, BLEND, BLEND_CV, BLEND_MODE, TEXTURE, TEXTURE_CV,
+Page 1: POS, POS_CV, DENSITY, DENSITY_CV, SIZE, SIZE_CV, SPRAY, SPRAY_CV,
+        PSPRD, PSPRD_CV
+Page 2: PITCH, PITCH_CV, BLEND_MODE, BLEND, BLEND_CV, TEXTURE, TEXTURE_CV,
         MIX, MIX_CV, FREEZE
 ```
 
-`BLEND_MODE` sits between `BLEND_CV` and `TEXTURE` — it has no CV slot and is not passed to
+`BLEND_MODE` is **before** `BLEND`/`BLEND_CV` so encoder navigation hits the label
+first (left-to-right visual order). It has no CV slot and is not passed to
 `CheckEditInputMapPress`.
+
+`PSPRD`/`PSPRD_CV` appear on page 1 row 5 (y=55). `psprd_cv` is packed in `data[3]`.
 
 ### Freeze (page 2, y=55)
 
@@ -124,11 +128,11 @@ Latches/unlatches `manual_freeze_`. Does NOT cycle blend mode (that is encoder-o
 data[0] = PackPackables(pos, density, size, texture, pitch, psprd, blend, mix)
 data[1] = PackPackables(pos_cv, density_cv, size_cv, spray_cv)
 data[2] = PackPackables(pitch_cv, blend_cv, texture_cv, mix_cv)
-data[3] = PackPackables(freeze_input, (uint8_t)blend_mode_, spray)
+data[3] = PackPackables(freeze_input, (uint8_t)blend_mode_, spray, psprd_cv)
 ```
 
-Note: `spray_cv` is in `data[1]`, `spray` value is in `data[3]`. `psprd` is hidden (no cursor)
-but persists in `data[0]`.
+Note: `spray_cv` is in `data[1]`, `spray` value is in `data[3]`. `psprd` value is in
+`data[0]`, `psprd_cv` is in `data[3]` (32 bits were spare there).
 
 ---
 

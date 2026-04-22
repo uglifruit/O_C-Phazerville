@@ -54,6 +54,7 @@ The wet (granular), reverb, and dry signals are mixed by the **Blend** and **Mix
 | **Den** | −20 to +20 Hz | Grain spawn rate, centred at silence. Negative = regular periodic; positive = stochastic (random timing). |
 | **Sz** | 10–500 ms | Grain duration. Short = glitchy fragments; long = smooth smear. |
 | **Spr** | 0–100% | Position scatter. Randomises each grain's start point around Pos. |
+| **PSp** | 0–100% | Pitch spread. Each grain's pitch is offset randomly by up to ±12 semitones (quadratic curve — 50% ≈ ±6 st). 0% = all grains at the same pitch. |
 
 ### Page 2
 
@@ -73,8 +74,8 @@ All parameters except Frz accept CV modulation via assignable CV inputs.
 
 The **Blend** knob is multi-functional. The Blend row on page 2 has two cursor positions:
 
-- **Mode label cursor** (on "WD"/"FB"/"RV"): encoder cycles between modes. The label is underlined when this cursor is active.
-- **Value cursor** (on the % number): encoder adjusts the blend amount.
+- **Mode label cursor** (on "WD"/"FB"/"RV"): first cursor position on the row — encoder cycles between modes. The label is underlined when active.
+- **Value cursor** (on the % number): second cursor position — encoder adjusts the blend amount.
 
 | Mode | Label | Blend controls |
 |------|-------|----------------|

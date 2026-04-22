@@ -29,7 +29,7 @@ extern "C" uint8_t external_psram_size;
 //   Both OR together. Frz row label inverts while latched.
 //
 // Parameters:
-//   Page 1: Pos, Den, Sz, Spr
+//   Page 1: Pos, Den, Sz, Spr, PSp
 //   Page 2: Pitch, Blend+Mode, Tex, Mix, Frz
 //
 template <AudioChannels Channels>
@@ -148,6 +148,10 @@ public:
             gfxPrint(1, 45, "Spr:");
             gfxStartCursor(); graphics.printf("%3d%%", spray); gfxEndCursor(cursor == SPRAY);
             gfxStartCursor(); gfxPrint(spray_cv); gfxEndCursor(cursor == SPRAY_CV, false, spray_cv.InputName());
+
+            gfxPrint(1, 55, "PSp:");
+            gfxStartCursor(); graphics.printf("%3d%%", psprd); gfxEndCursor(cursor == PSPRD);
+            gfxStartCursor(); gfxPrint(psprd_cv); gfxEndCursor(cursor == PSPRD_CV, false, psprd_cv.InputName());
         } else {
             // ── Page 2: Pitch, Blend+Mode, Tex, Mix, Frz (y=15/25/35/45/55) ─
 
@@ -201,6 +205,7 @@ public:
                 IndexedInput(DENSITY_CV,  density_cv),
                 IndexedInput(SIZE_CV,     size_cv),
                 IndexedInput(SPRAY_CV,    spray_cv),
+                IndexedInput(PSPRD_CV,    psprd_cv),
                 IndexedInput(PITCH_CV,    pitch_cv),
                 IndexedInput(BLEND_CV,    blend_cv),
                 IndexedInput(TEXTURE_CV,  texture_cv),
@@ -227,6 +232,8 @@ public:
             case SIZE_CV:    size_cv.ChangeSource(direction);                       break;
             case SPRAY:      spray    = constrain(spray    + direction,   0, 100); break;
             case SPRAY_CV:   spray_cv.ChangeSource(direction);                     break;
+            case PSPRD:      psprd    = constrain(psprd    + direction,   0, 100); break;
+            case PSPRD_CV:   psprd_cv.ChangeSource(direction);                     break;
             case PITCH:      pitch    = constrain(pitch    + direction, -12,  12); break;
             case PITCH_CV:   pitch_cv.ChangeSource(direction);                     break;
             case BLEND:      blend    = constrain(blend    + direction,   0, 100); break;
@@ -249,7 +256,7 @@ public:
         data[0] = PackPackables(MISTIER_PARAMS);
         data[1] = PackPackables(pos_cv, density_cv, size_cv, spray_cv);
         data[2] = PackPackables(pitch_cv, blend_cv, texture_cv, mix_cv);
-        data[3] = PackPackables(freeze_input, (uint8_t)blend_mode_, spray);
+        data[3] = PackPackables(freeze_input, (uint8_t)blend_mode_, spray, psprd_cv);
     }
 
     void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
@@ -257,7 +264,7 @@ public:
         UnpackPackables(data[1], pos_cv, density_cv, size_cv, spray_cv);
         UnpackPackables(data[2], pitch_cv, blend_cv, texture_cv, mix_cv);
         uint8_t bm = 0;
-        UnpackPackables(data[3], freeze_input, bm, spray);
+        UnpackPackables(data[3], freeze_input, bm, spray, psprd_cv);
         blend_mode_ = (BlendMode)constrain(bm, 0, 2);
     }
 #undef MISTIER_PARAMS
@@ -281,10 +288,11 @@ private:
         DENSITY, DENSITY_CV,
         SIZE, SIZE_CV,
         SPRAY, SPRAY_CV,
+        PSPRD, PSPRD_CV,      // pitch spread (was hidden)
         // Page 2
         PITCH, PITCH_CV,
-        BLEND, BLEND_CV,
-        BLEND_MODE,           // encoder cycles WD→FB→RV; no CV slot
+        BLEND_MODE,           // label first (left-to-right visual order): cycles WD→FB→RV
+        BLEND, BLEND_CV,      // value, then CV slot
         TEXTURE, TEXTURE_CV,
         MIX, MIX_CV,
         FREEZE,               // DigitalInputMap; button opens input map editor
