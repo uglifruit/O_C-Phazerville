@@ -71,7 +71,10 @@ All parameters except Frz accept CV modulation via assignable CV inputs.
 
 ## Blend Modes
 
-The **Blend** knob is multi-functional. Use the encoder on the **WD/FB/RV** label to cycle between modes:
+The **Blend** knob is multi-functional. The Blend row on page 2 has two cursor positions:
+
+- **Mode label cursor** (on "WD"/"FB"/"RV"): encoder cycles between modes. The label is underlined when this cursor is active.
+- **Value cursor** (on the % number): encoder adjusts the blend amount.
 
 | Mode | Label | Blend controls |
 |------|-------|----------------|
@@ -129,7 +132,7 @@ Freeze halts the write pointer. Grains continue to spawn and play from the froze
 - **Gate input** on the Frz parameter (hardware gate cable)
 - **Aux button** latch (no cable needed — great for live use)
 
-When latched, the **Frz** row label inverts on screen.
+When latched, the **Frz** row label is shown inverted (white on black) on screen.
 
 ---
 
