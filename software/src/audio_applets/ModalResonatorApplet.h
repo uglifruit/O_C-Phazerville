@@ -203,6 +203,7 @@ public:
             case POS_CV:     pos_cv.ChangeSource(direction);     break;
             case MIX:        mix        = constrain(mix        + direction, 0, 100); break;
             case MIX_CV:     mix_cv.ChangeSource(direction);     break;
+            case STRIKE:     strike_input.ChangeSource(direction); break;
             default: break;
         }
     }

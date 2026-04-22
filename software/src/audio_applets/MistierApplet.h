@@ -160,9 +160,9 @@ public:
             gfxStartCursor(); gfxPrint(pitch_cv); gfxEndCursor(cursor == PITCH_CV, false, pitch_cv.InputName());
 
             // Blend: mode label and value share one row. Two separate cursors.
-            // BLEND_MODE cursor underlines the 3-char label; BLEND cursor underlines the value.
+            // BLEND cursor underlines the value; BLEND_MODE cursor underlines the label.
             static const char* BLEND_LABELS[] = { "WD", "FB", "RV" };
-            gfxStartCursor(); gfxPrint(1, 25, BLEND_LABELS[blend_mode_]); gfxPrint(":"); gfxEndCursor(cursor == BLEND_MODE);
+            gfxStartCursor(1, 25); gfxPrint(BLEND_LABELS[blend_mode_]); gfxPrint(":"); gfxEndCursor(cursor == BLEND_MODE);
             gfxStartCursor(); graphics.printf("%3d%%", blend); gfxEndCursor(cursor == BLEND);
             gfxStartCursor(); gfxPrint(blend_cv); gfxEndCursor(cursor == BLEND_CV, false, blend_cv.InputName());
 
@@ -176,9 +176,9 @@ public:
             gfxStartCursor(); graphics.printf("%3d%%", mix); gfxEndCursor(cursor == MIX);
             gfxStartCursor(); gfxPrint(mix_cv); gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
 
-            // Freeze — label inverts while manual latch is active
-            if (manual_freeze_) gfxInvert(1, 55, 20, 8);
+            // Freeze — label inverts while manual latch is active (print first, then invert)
             gfxPrint(1, 55, "Frz:");
+            if (manual_freeze_) gfxInvert(1, 55, 20, 8);
             gfxStartCursor(); gfxPrint(freeze_input); gfxEndCursor(cursor == FREEZE, true, freeze_input.InputName());
         }
 
