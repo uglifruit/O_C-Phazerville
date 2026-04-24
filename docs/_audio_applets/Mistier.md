@@ -61,7 +61,7 @@ The wet (granular), reverb, and dry signals are mixed by the **Blend** and **Mix
 | Param | Range | Description |
 |-------|-------|-------------|
 | **Pt** | −12 to +12 st | Pitch shift in semitones. Unity = 0. |
-| **WD/FB/RV** | 0–100% | Blend parameter — meaning changes with mode (see Blend Modes below). |
+| **FB/RV** | 0–100% | Blend parameter — feedback amount (FB) or reverb send (RV). See Blend Modes. |
 | **Tex** | 0–100% | Grain window shape. 0% = rectangular (harsh/clicky), 50% = triangle, 100% = Hann (smooth). |
 | **Mix** | 0–100% | Output level / wet amount. |
 | **Frz** | gate / latch | Freeze. Stops the write pointer so grains replay a fixed snapshot. |
@@ -72,16 +72,17 @@ All parameters except Frz accept CV modulation via assignable CV inputs.
 
 ## Blend Modes
 
-The **Blend** knob is multi-functional. The Blend row on page 2 has two cursor positions:
+**Mix** always controls the wet/dry balance (equal-power crossfade). **Blend** controls the amount of the selected effect.
 
-- **Mode label cursor** (on "WD"/"FB"/"RV"): first cursor position on the row — encoder cycles between modes. The label is underlined when active.
-- **Value cursor** (on the % number): second cursor position — encoder adjusts the blend amount.
+The Blend row on page 2 has two cursor positions:
+
+- **Mode label cursor** (on "FB"/"RV"): first cursor position — encoder toggles between modes. The label is underlined when active.
+- **Value cursor** (on the % number): second cursor position — encoder adjusts the effect amount.
 
 | Mode | Label | Blend controls |
 |------|-------|----------------|
-| Wet/Dry | **WD** | Balance between granular (wet) and live (dry) signal. 0% = fully dry, 100% = fully wet. |
 | Feedback | **FB** | Amount of grain output fed back into the recording buffer. Creates self-reinforcing granular textures. |
-| Reverb | **RV** | Amount of reverb applied to the grain output. |
+| Reverb | **RV** | Amount of reverb applied to the grain output, scaled with the wet level. |
 
 The current mode is shown as the label before the Blend value on page 2.
 

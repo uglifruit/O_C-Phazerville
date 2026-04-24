@@ -18,10 +18,10 @@ extern "C" uint8_t external_psram_size;
 //   wet   → [AudioEffectReverbSchroeder] → reverb_out ──────────────┤
 //   Input →                              → dry ─────────────────────┤ AudioMixer<3> → Output
 //
-// Blend multi-mode (encoder on BLEND_MODE cursor, or AuxButton latches freeze):
-//   WD  — Blend controls wet/dry ratio (equal-power crossfade)
+// Blend multi-mode (encoder on BLEND_MODE cursor cycles FB/RV):
+//   Mix always controls wet/dry (equal-power crossfade)
 //   FB  — Blend controls grain feedback amount
-//   RV  — Blend controls reverb send
+//   RV  — Blend controls reverb send (scales with wet gain)
 //
 // Freeze:
 //   • AuxButton: latches/unlatches manual freeze (performance use, no cable needed)
@@ -76,23 +76,14 @@ public:
         float eff_feedback = 0.0f;
         float eff_mix = constrain(0.01f * mix + mix_cv.InF(), 0.0f, 1.0f);
 
+        // Mix always controls wet/dry balance. Blend controls the selected effect amount.
+        EqualPowerFade(dry_gain, wet_gain, eff_mix);
         switch (blend_mode_) {
-            case BLEND_WD:
-                // Blend controls wet/dry balance; mix scales overall output.
-                EqualPowerFade(dry_gain, wet_gain, eff_blend);
-                dry_gain *= eff_mix;
-                wet_gain *= eff_mix;
-                break;
             case BLEND_FB:
-                // Blend drives feedback; mix controls wet/dry as normal.
                 eff_feedback = eff_blend;
-                EqualPowerFade(dry_gain, wet_gain, eff_mix);
                 break;
             case BLEND_RV:
-                // Blend drives reverb send; mix scales wet output level.
-                reverb_gain = eff_blend * eff_mix;
-                wet_gain    = eff_mix;
-                dry_gain    = 0.0f;
+                reverb_gain = eff_blend * wet_gain;
                 break;
         }
 
@@ -165,7 +156,7 @@ public:
 
             // Blend: mode label and value share one row. Two separate cursors.
             // BLEND cursor underlines the value; BLEND_MODE cursor underlines the label.
-            static const char* BLEND_LABELS[] = { "WD", "FB", "RV" };
+            static const char* BLEND_LABELS[] = { "FB", "RV" };
             gfxStartCursor(1, 25); gfxPrint(BLEND_LABELS[blend_mode_]); gfxPrint(":"); gfxEndCursor(cursor == BLEND_MODE);
             gfxStartCursor(); graphics.printf("%3d%%", blend); gfxEndCursor(cursor == BLEND);
             gfxStartCursor(); gfxPrint(blend_cv); gfxEndCursor(cursor == BLEND_CV, false, blend_cv.InputName());
@@ -239,8 +230,8 @@ public:
             case BLEND:      blend    = constrain(blend    + direction,   0, 100); break;
             case BLEND_CV:   blend_cv.ChangeSource(direction);                     break;
             case BLEND_MODE:
-                // Cycle WD→FB→RV→WD in either direction.
-                blend_mode_ = (BlendMode)((blend_mode_ + 3 + direction) % 3);
+                // Cycle FB→RV→FB in either direction.
+                blend_mode_ = (BlendMode)((blend_mode_ + 2 + direction) % 2);
                 break;
             case TEXTURE:    texture  = constrain(texture  + direction,   0, 100); break;
             case TEXTURE_CV: texture_cv.ChangeSource(direction);                   break;
@@ -265,7 +256,7 @@ public:
         UnpackPackables(data[2], pitch_cv, blend_cv, texture_cv, mix_cv);
         uint8_t bm = 0;
         UnpackPackables(data[3], freeze_input, bm, spray, psprd_cv);
-        blend_mode_ = (BlendMode)constrain(bm, 0, 2);
+        blend_mode_ = (BlendMode)constrain(bm, 0, 1);
     }
 #undef MISTIER_PARAMS
 
@@ -277,9 +268,8 @@ protected:
 
 private:
     enum BlendMode : uint8_t {
-        BLEND_WD = 0,  // blend = wet/dry balance
-        BLEND_FB = 1,  // blend = feedback amount
-        BLEND_RV = 2,  // blend = reverb send
+        BLEND_FB = 0,  // blend = feedback amount; mix = wet/dry
+        BLEND_RV = 1,  // blend = reverb send;     mix = wet/dry
     };
 
     enum Cursor : int8_t {
@@ -322,7 +312,7 @@ private:
     CVInputMap mix_cv;
     DigitalInputMap freeze_input;
 
-    BlendMode blend_mode_    = BLEND_WD;
+    BlendMode blend_mode_    = BLEND_FB;
     bool      manual_freeze_ = false;  // latched by AuxButton
 
     // Per-channel DSP struct.

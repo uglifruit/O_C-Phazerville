@@ -88,12 +88,13 @@ to exactly 0.0f, skipping all grain spawning and producing silence.
 The Blend row is unusual: three cursors share one display line.
 
 ```
-BLEND_MODE cursor → underlines the 3-char label ("WD"/"FB"/"RV")
+BLEND_MODE cursor → underlines the 2-char label ("FB"/"RV")
 BLEND cursor      → underlines the % value
 BLEND_CV cursor   → underlines the CV assignment widget
 ```
 
-- `BLEND_MODE`: in edit mode, encoder cycles `(blend_mode_ + 3 + direction) % 3` — wraps both ways
+- `BLEND_MODE`: in edit mode, encoder cycles `(blend_mode_ + 2 + direction) % 2` — wraps both ways
+- Mix always controls wet/dry; WD mode was removed (redundant with Mix)
 - `BLEND_CV`: no CV slot shown separately; it's the third cursor on the same row
 
 ### Cursor enum (in order)
