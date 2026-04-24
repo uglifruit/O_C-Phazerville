@@ -26,7 +26,7 @@ Inspired by Mutable Instruments Clouds, Mistier extends the simpler [Mist](Mist.
 - Continuous grain window morphing (Texture)
 - Density centred at silence, with stochastic or periodic modes
 - Grain feedback — the granular output feeds back into the recording buffer
-- Post-grain reverb, with a multi-mode Blend control
+- Pitch spread — each grain is randomly pitched within a configurable range around the base pitch
 
 Available as a **MONO** applet.
 
@@ -36,11 +36,10 @@ Available as a **MONO** applet.
 
 ```
 Audio In ──► AudioEffectClouds (grain cloud) ──► wet ──────────────────┐
-wet      ──► Reverb ──────────────────────────► reverb ────────────────┤──► Output
-Audio In ──────────────────────────────────────► dry ──────────────────┘
+Audio In ──────────────────────────────────────► dry ──────────────────┤──► Output
 ```
 
-The wet (granular), reverb, and dry signals are mixed by the **Blend** and **Mix** parameters.
+The wet (granular) and dry signals are mixed by the **Mix** parameter.
 
 ---
 
@@ -61,30 +60,12 @@ The wet (granular), reverb, and dry signals are mixed by the **Blend** and **Mix
 | Param | Range | Description |
 |-------|-------|-------------|
 | **Pt** | −12 to +12 st | Pitch shift in semitones. Unity = 0. |
-| **FB/RV** | 0–100% | Blend parameter — feedback amount (FB) or reverb send (RV). See Blend Modes. |
+| **Fdb** | 0–100% | Feedback. Amount of grain output fed back into the recording buffer. |
 | **Tex** | 0–100% | Grain window shape. 0% = rectangular (harsh/clicky), 50% = triangle, 100% = Hann (smooth). |
-| **Mix** | 0–100% | Output level / wet amount. |
+| **Mix** | 0–100% | Wet/dry balance. 0% = fully dry, 100% = fully wet. |
 | **Frz** | gate / latch | Freeze. Stops the write pointer so grains replay a fixed snapshot. |
 
 All parameters except Frz accept CV modulation via assignable CV inputs.
-
----
-
-## Blend Modes
-
-**Mix** always controls the wet/dry balance (equal-power crossfade). **Blend** controls the amount of the selected effect.
-
-The Blend row on page 2 has two cursor positions:
-
-- **Mode label cursor** (on "FB"/"RV"): first cursor position — encoder toggles between modes. The label is underlined when active.
-- **Value cursor** (on the % number): second cursor position — encoder adjusts the effect amount.
-
-| Mode | Label | Blend controls |
-|------|-------|----------------|
-| Feedback | **FB** | Amount of grain output fed back into the recording buffer. Creates self-reinforcing granular textures. |
-| Reverb | **RV** | Amount of reverb applied to the grain output, scaled with the wet level. |
-
-The current mode is shown as the label before the Blend value on page 2.
 
 ---
 
@@ -93,7 +74,7 @@ The current mode is shown as the label before the Blend value on page 2.
 | Control | Action |
 |---------|--------|
 | Encoder (browse) | Navigate cursor through parameters |
-| Encoder (edit) | Adjust parameter value; on the mode label — cycle WD/FB/RV |
+| Encoder (edit) | Adjust parameter value |
 | Button | Enter/exit edit mode; assign CV input when cursor is on a CV slot |
 | **Aux button** | Latch/unlatch manual freeze — for live performance without a gate cable |
 
@@ -140,7 +121,9 @@ When latched, the **Frz** row label is shown inverted (white on black) on screen
 
 ## Feedback
 
-In **FB** mode, the Blend knob feeds a portion of the grain output back into the audio recording buffer. At low amounts this adds warmth and density. At high amounts it creates self-reinforcing feedback textures. With Freeze active, the feedback circulates endlessly within the frozen buffer.
+The **Fdb** parameter feeds a portion of the grain output back into the audio recording buffer. At low amounts this adds warmth and density. At high amounts it creates self-reinforcing feedback textures. With Freeze active, the feedback circulates endlessly within the frozen buffer. Default is 0% — no feedback.
+
+If you want reverb on the granular output, add a **Bungverb** applet downstream in the processor chain.
 
 ---
 

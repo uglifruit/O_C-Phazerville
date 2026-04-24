@@ -20,20 +20,21 @@ MistApplet is **unchanged and still present** alongside Mistier in the mono proc
 
 ```
 Input ──► AudioEffectClouds (grain_stream) ──► wet ──────────────────────────────►┐
-wet   ──► AudioEffectReverbSchroeder (reverb) ──► reverb_out ─────────────────────►┤ AudioMixer<3> ──► Output
-Input ──────────────────────────────────────────────────── dry ───────────────────►┘
+Input ──────────────────────────────────────────────────── dry ───────────────────►┤ AudioMixer<2> ──► Output
 ```
 
 `MistierApplet<Channels>` is templated; currently only `MONO` is instantiated in `_config.h`
 (stereo not added to keep RAM1 pressure down).
 
+Reverb was deliberately removed — users can insert a reverb applet downstream in the processor
+chain instead. This frees one `bung_factory` slot (shared pool of 8 reverb instances) and
+reduces CPU load by one Schroeder/Moorer filter bank per block.
+
 ### MistierChannel struct
 
 Each channel owns:
 - `AudioEffectClouds grain_stream` — records audio, spawns/plays grains
-- `AudioEffectReverbSchroeder* reverb` — borrowed from `bung_factory` via `GetBungverb()`; may be
-  null if all 8 factory slots are in use — code handles this gracefully
-- `AudioMixer<3> mixer` — channels: 0=dry, 1=wet, 2=reverb
+- `AudioMixer<2> mixer` — channels: 0=dry, 1=wet
 
 ---
 
@@ -76,39 +77,24 @@ to exactly 0.0f, skipping all grain spawning and producing silence.
 
 ## UI Layer (MistierApplet)
 
-### Two-page layout (10px row spacing, y=15/25/35/45 on page 1, y=15/25/35/45/55 on page 2)
+### Two-page layout (10px row spacing, y=15/25/35/45/55 on both pages)
 
 | Page | Rows |
 |------|------|
-| 1 (`cursor < PITCH`) | Pos, Den, Sz, Spr |
-| 2 (`cursor >= PITCH`) | Pitch, Blend+Mode, Tex, Mix, Frz |
+| 1 (`cursor < PITCH`) | Pos, Den, Sz, Spr, PSp |
+| 2 (`cursor >= PITCH`) | Pitch, Fdb, Tex, Mix, Frz |
 
-### Blend row (page 2, y=25) — three cursors, one row
-
-The Blend row is unusual: three cursors share one display line.
-
-```
-BLEND_MODE cursor → underlines the 2-char label ("FB"/"RV")
-BLEND cursor      → underlines the % value
-BLEND_CV cursor   → underlines the CV assignment widget
-```
-
-- `BLEND_MODE`: in edit mode, encoder cycles `(blend_mode_ + 2 + direction) % 2` — wraps both ways
-- Mix always controls wet/dry; WD mode was removed (redundant with Mix)
-- `BLEND_CV`: no CV slot shown separately; it's the third cursor on the same row
+Page 2 has five clean rows — no multi-cursor rows, no mode cycling.
 
 ### Cursor enum (in order)
 
 ```
 Page 1: POS, POS_CV, DENSITY, DENSITY_CV, SIZE, SIZE_CV, SPRAY, SPRAY_CV,
         PSPRD, PSPRD_CV
-Page 2: PITCH, PITCH_CV, BLEND_MODE, BLEND, BLEND_CV, TEXTURE, TEXTURE_CV,
-        MIX, MIX_CV, FREEZE
+Page 2: PITCH, PITCH_CV, FDB, FDB_CV, TEXTURE, TEXTURE_CV, MIX, MIX_CV, FREEZE
 ```
 
-`BLEND_MODE` is **before** `BLEND`/`BLEND_CV` so encoder navigation hits the label
-first (left-to-right visual order). It has no CV slot and is not passed to
-`CheckEditInputMapPress`.
+All page 2 cursors are symmetric: value cursor + CV cursor pairs, plus FREEZE (DigitalInputMap).
 
 `PSPRD`/`PSPRD_CV` appear on page 1 row 5 (y=55). `psprd_cv` is packed in `data[3]`.
 
@@ -121,37 +107,36 @@ first (left-to-right visual order). It has no CV slot and is not passed to
 
 ### AuxButton
 
-Latches/unlatches `manual_freeze_`. Does NOT cycle blend mode (that is encoder-only).
+Latches/unlatches `manual_freeze_`.
 
 ### Data packing
 
 ```cpp
-data[0] = PackPackables(pos, density, size, texture, pitch, psprd, blend, mix)
+data[0] = PackPackables(pos, density, size, texture, pitch, psprd, fdb, mix)
 data[1] = PackPackables(pos_cv, density_cv, size_cv, spray_cv)
-data[2] = PackPackables(pitch_cv, blend_cv, texture_cv, mix_cv)
-data[3] = PackPackables(freeze_input, (uint8_t)blend_mode_, spray, psprd_cv)
+data[2] = PackPackables(pitch_cv, fdb_cv, texture_cv, mix_cv)
+data[3] = PackPackables(freeze_input, spray, psprd_cv)
 ```
 
 Note: `spray_cv` is in `data[1]`, `spray` value is in `data[3]`. `psprd` value is in
-`data[0]`, `psprd_cv` is in `data[3]` (32 bits were spare there).
+`data[0]`, `psprd_cv` is in `data[3]`. `fdb`/`fdb_cv` replaced the old `blend`/`blend_cv`/
+`blend_mode_` at the same bit positions — `blend_mode_` byte has been dropped from data[3],
+shifting `spray` and `psprd_cv`. Old saves will reset spray to default (20) on first load.
 
 ---
 
 ## RAM1 Notes
 
 - Mono only — no stereo template. Adding `MistierApplet<STEREO>` would roughly halve remaining headroom.
-- RAM1 free after build: ~6.9 KB (T41 slot 0)
-- If RAM1 overflows: remove reverb chain from `MistierChannel::Start()` (biggest saving) or
-  reduce `MAX_GRAINS` in `AudioEffectClouds.h`
+- RAM1 free after build: ~6.9 KB (T41 slot 0) — reverb removal should improve this slightly.
+- If RAM1 overflows: reduce `MAX_GRAINS` in `AudioEffectClouds.h`.
 
 ---
 
 ## Known Gotchas
 
 - `density = 50` → exactly 0 Hz → silence. Default is 75. Never reset this to 50 as a "neutral" default.
-- `BLEND_MODE` cursor is NOT in `CheckEditInputMapPress` — correct, it has no input map.
-- Reverb `reverb` pointer may be null if bung_factory is exhausted. All reverb accesses are guarded.
 - `hann_lut_` is `const` (not `constexpr`) — ends up in `.rodata` (flash). On AVR this would need
   `PROGMEM`; on Teensy 4.1 (IMXRT, von Neumann) `const` is sufficient.
-- `psprd_cv` member exists but has no cursor — it's a silent fallback from the original design.
-  Its value is always `psprd=0`, CV source unassigned. Safe to leave.
+- No reverb in this applet. If you need reverb, add BungverbApplet downstream in the processor chain.
+- `fdb = 0` default means no feedback on first load — intentional, avoids surprising runaway on startup.

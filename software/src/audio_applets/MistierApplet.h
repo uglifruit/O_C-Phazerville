@@ -10,18 +10,12 @@ extern "C" uint8_t external_psram_size;
 // cloud of overlapping grains. Differences from MistApplet:
 //   • Texture — continuous window morph: rect → triangle → Hann
 //   • Density — centred at 0 (silence). CCW → regular periodic. CW → stochastic.
-//   • Feedback/reverb — via Blend multi-mode (encoder cycles WD/FB/RV on BLEND_MODE cursor)
+//   • Feedback (Fdb) — grain output fed back into the record buffer
 //   • No fixed grain shapes — shape driven by Texture
 //
 // I/O:
 //   Input → [AudioEffectClouds] → wet ──────────────────────────────┐
-//   wet   → [AudioEffectReverbSchroeder] → reverb_out ──────────────┤
-//   Input →                              → dry ─────────────────────┤ AudioMixer<3> → Output
-//
-// Blend multi-mode (encoder on BLEND_MODE cursor cycles FB/RV):
-//   Mix always controls wet/dry (equal-power crossfade)
-//   FB  — Blend controls grain feedback amount
-//   RV  — Blend controls reverb send (scales with wet gain)
+//   Input →                     → dry ─────────────────────────────┤ AudioMixer<2> → Output
 //
 // Freeze:
 //   • AuxButton: latches/unlatches manual freeze (performance use, no cable needed)
@@ -30,7 +24,7 @@ extern "C" uint8_t external_psram_size;
 //
 // Parameters:
 //   Page 1: Pos, Den, Sz, Spr, PSp
-//   Page 2: Pitch, Blend+Mode, Tex, Mix, Frz
+//   Page 2: Pitch, Fdb, Tex, Mix, Frz
 //
 template <AudioChannels Channels>
 class MistierApplet : public HemisphereAudioApplet {
@@ -44,7 +38,7 @@ public:
     }
 
     void Unload() override {
-        for (auto& ch : channels) ch.Stop(this);
+        for (auto& ch : channels) ch.Stop();
         AllowRestart();
     }
 
@@ -65,27 +59,15 @@ public:
         float eff_psprd_raw   = constrain(0.01f * psprd + psprd_cv.InF(), 0.0f, 1.0f);
         float eff_psprd_semis = 12.0f * eff_psprd_raw * eff_psprd_raw;
 
-        // Blend param 0..1 from UI + CV.
-        float eff_blend = constrain(0.01f * blend + blend_cv.InF(), 0.0f, 1.0f);
+        // Feedback and wet/dry.
+        float eff_feedback = constrain(0.01f * fdb + fdb_cv.InF(), 0.0f, 1.0f);
+        float eff_mix      = constrain(0.01f * mix + mix_cv.InF(), 0.0f, 1.0f);
 
         // Freeze: hardware gate OR manual latch.
         bool frozen = freeze_input.Gate() || manual_freeze_;
 
-        // Wet/dry/reverb gains depend on blend mode.
-        float dry_gain = 1.0f, wet_gain = 1.0f, reverb_gain = 0.0f;
-        float eff_feedback = 0.0f;
-        float eff_mix = constrain(0.01f * mix + mix_cv.InF(), 0.0f, 1.0f);
-
-        // Mix always controls wet/dry balance. Blend controls the selected effect amount.
+        float dry_gain, wet_gain;
         EqualPowerFade(dry_gain, wet_gain, eff_mix);
-        switch (blend_mode_) {
-            case BLEND_FB:
-                eff_feedback = eff_blend;
-                break;
-            case BLEND_RV:
-                reverb_gain = eff_blend * wet_gain;
-                break;
-        }
 
         for (int ch = 0; ch < Channels; ch++) {
             channels[ch].grain_stream.setPosition(eff_pos);
@@ -97,9 +79,8 @@ public:
             channels[ch].grain_stream.setTexture(eff_texture);
             channels[ch].grain_stream.setFeedback(eff_feedback);
             channels[ch].grain_stream.setFreeze(frozen);
-            channels[ch].mixer.gain(MistierChannel::DRY_CH,  dry_gain);
-            channels[ch].mixer.gain(MistierChannel::WET_CH,  wet_gain);
-            channels[ch].mixer.gain(MistierChannel::VERB_CH, reverb_gain);
+            channels[ch].mixer.gain(MistierChannel::DRY_CH, dry_gain);
+            channels[ch].mixer.gain(MistierChannel::WET_CH, wet_gain);
         }
     }
 
@@ -119,7 +100,7 @@ public:
         const bool pg2 = (cursor >= PITCH);
 
         if (!pg2) {
-            // ── Page 1: Pos, Den, Sz, Spr (y=15/25/35/45) ──────────────────
+            // ── Page 1: Pos, Den, Sz, Spr, PSp (y=15/25/35/45/55) ──────────
             gfxPrint(1, 15, "Pos:");
             gfxStartCursor(); graphics.printf("%3d%%", pos); gfxEndCursor(cursor == POS);
             gfxStartCursor(); gfxPrint(pos_cv); gfxEndCursor(cursor == POS_CV, false, pos_cv.InputName());
@@ -144,7 +125,7 @@ public:
             gfxStartCursor(); graphics.printf("%3d%%", psprd); gfxEndCursor(cursor == PSPRD);
             gfxStartCursor(); gfxPrint(psprd_cv); gfxEndCursor(cursor == PSPRD_CV, false, psprd_cv.InputName());
         } else {
-            // ── Page 2: Pitch, Blend+Mode, Tex, Mix, Frz (y=15/25/35/45/55) ─
+            // ── Page 2: Pitch, Fdb, Tex, Mix, Frz (y=15/25/35/45/55) ────────
 
             // Pitch
             gfxPrint(1, 15, "Pt:");
@@ -154,12 +135,10 @@ public:
             gfxEndCursor(cursor == PITCH);
             gfxStartCursor(); gfxPrint(pitch_cv); gfxEndCursor(cursor == PITCH_CV, false, pitch_cv.InputName());
 
-            // Blend: mode label and value share one row. Two separate cursors.
-            // BLEND cursor underlines the value; BLEND_MODE cursor underlines the label.
-            static const char* BLEND_LABELS[] = { "FB", "RV" };
-            gfxStartCursor(1, 25); gfxPrint(BLEND_LABELS[blend_mode_]); gfxPrint(":"); gfxEndCursor(cursor == BLEND_MODE);
-            gfxStartCursor(); graphics.printf("%3d%%", blend); gfxEndCursor(cursor == BLEND);
-            gfxStartCursor(); gfxPrint(blend_cv); gfxEndCursor(cursor == BLEND_CV, false, blend_cv.InputName());
+            // Feedback
+            gfxPrint(1, 25, "Fdb:");
+            gfxStartCursor(); graphics.printf("%3d%%", fdb); gfxEndCursor(cursor == FDB);
+            gfxStartCursor(); gfxPrint(fdb_cv); gfxEndCursor(cursor == FDB_CV, false, fdb_cv.InputName());
 
             // Texture
             gfxPrint(1, 35, "Tex:");
@@ -198,7 +177,7 @@ public:
                 IndexedInput(SPRAY_CV,    spray_cv),
                 IndexedInput(PSPRD_CV,    psprd_cv),
                 IndexedInput(PITCH_CV,    pitch_cv),
-                IndexedInput(BLEND_CV,    blend_cv),
+                IndexedInput(FDB_CV,      fdb_cv),
                 IndexedInput(TEXTURE_CV,  texture_cv),
                 IndexedInput(MIX_CV,      mix_cv),
                 IndexedInput(FREEZE,      freeze_input)
@@ -215,48 +194,42 @@ public:
         if (EditSelectedInputMap(direction)) return;
 
         switch (cursor) {
-            case POS:        pos      = constrain(pos      + direction,   0, 100); break;
-            case POS_CV:     pos_cv.ChangeSource(direction);                        break;
-            case DENSITY:    density  = constrain(density  + direction,   0, 100); break;
-            case DENSITY_CV: density_cv.ChangeSource(direction);                   break;
-            case SIZE:       size     = constrain(size     + direction,   1,  50); break;
-            case SIZE_CV:    size_cv.ChangeSource(direction);                       break;
-            case SPRAY:      spray    = constrain(spray    + direction,   0, 100); break;
-            case SPRAY_CV:   spray_cv.ChangeSource(direction);                     break;
-            case PSPRD:      psprd    = constrain(psprd    + direction,   0, 100); break;
-            case PSPRD_CV:   psprd_cv.ChangeSource(direction);                     break;
-            case PITCH:      pitch    = constrain(pitch    + direction, -12,  12); break;
-            case PITCH_CV:   pitch_cv.ChangeSource(direction);                     break;
-            case BLEND:      blend    = constrain(blend    + direction,   0, 100); break;
-            case BLEND_CV:   blend_cv.ChangeSource(direction);                     break;
-            case BLEND_MODE:
-                // Cycle FB→RV→FB in either direction.
-                blend_mode_ = (BlendMode)((blend_mode_ + 2 + direction) % 2);
-                break;
-            case TEXTURE:    texture  = constrain(texture  + direction,   0, 100); break;
-            case TEXTURE_CV: texture_cv.ChangeSource(direction);                   break;
-            case MIX:        mix      = constrain(mix      + direction,   0, 100); break;
-            case MIX_CV:     mix_cv.ChangeSource(direction);                       break;
-            case FREEZE:     freeze_input.ChangeSource(direction);                 break;
+            case POS:        pos     = constrain(pos     + direction,   0, 100); break;
+            case POS_CV:     pos_cv.ChangeSource(direction);                      break;
+            case DENSITY:    density = constrain(density + direction,   0, 100); break;
+            case DENSITY_CV: density_cv.ChangeSource(direction);                  break;
+            case SIZE:       size    = constrain(size    + direction,   1,  50); break;
+            case SIZE_CV:    size_cv.ChangeSource(direction);                     break;
+            case SPRAY:      spray   = constrain(spray   + direction,   0, 100); break;
+            case SPRAY_CV:   spray_cv.ChangeSource(direction);                    break;
+            case PSPRD:      psprd   = constrain(psprd   + direction,   0, 100); break;
+            case PSPRD_CV:   psprd_cv.ChangeSource(direction);                    break;
+            case PITCH:      pitch   = constrain(pitch   + direction, -12,  12); break;
+            case PITCH_CV:   pitch_cv.ChangeSource(direction);                    break;
+            case FDB:        fdb     = constrain(fdb     + direction,   0, 100); break;
+            case FDB_CV:     fdb_cv.ChangeSource(direction);                      break;
+            case TEXTURE:    texture = constrain(texture + direction,   0, 100); break;
+            case TEXTURE_CV: texture_cv.ChangeSource(direction);                  break;
+            case MIX:        mix     = constrain(mix     + direction,   0, 100); break;
+            case MIX_CV:     mix_cv.ChangeSource(direction);                      break;
+            case FREEZE:     freeze_input.ChangeSource(direction);                break;
             default: break;
         }
     }
 
-#define MISTIER_PARAMS  pos, density, size, texture, pitch, psprd, blend, mix
+#define MISTIER_PARAMS  pos, density, size, texture, pitch, psprd, fdb, mix
     void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(MISTIER_PARAMS);
         data[1] = PackPackables(pos_cv, density_cv, size_cv, spray_cv);
-        data[2] = PackPackables(pitch_cv, blend_cv, texture_cv, mix_cv);
-        data[3] = PackPackables(freeze_input, (uint8_t)blend_mode_, spray, psprd_cv);
+        data[2] = PackPackables(pitch_cv, fdb_cv, texture_cv, mix_cv);
+        data[3] = PackPackables(freeze_input, spray, psprd_cv);
     }
 
     void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], MISTIER_PARAMS);
         UnpackPackables(data[1], pos_cv, density_cv, size_cv, spray_cv);
-        UnpackPackables(data[2], pitch_cv, blend_cv, texture_cv, mix_cv);
-        uint8_t bm = 0;
-        UnpackPackables(data[3], freeze_input, bm, spray, psprd_cv);
-        blend_mode_ = (BlendMode)constrain(bm, 0, 1);
+        UnpackPackables(data[2], pitch_cv, fdb_cv, texture_cv, mix_cv);
+        UnpackPackables(data[3], freeze_input, spray, psprd_cv);
     }
 #undef MISTIER_PARAMS
 
@@ -267,25 +240,19 @@ protected:
     void SetHelp() override {}
 
 private:
-    enum BlendMode : uint8_t {
-        BLEND_FB = 0,  // blend = feedback amount; mix = wet/dry
-        BLEND_RV = 1,  // blend = reverb send;     mix = wet/dry
-    };
-
     enum Cursor : int8_t {
         // Page 1
         POS = 0, POS_CV,
         DENSITY, DENSITY_CV,
         SIZE, SIZE_CV,
         SPRAY, SPRAY_CV,
-        PSPRD, PSPRD_CV,      // pitch spread (was hidden)
+        PSPRD, PSPRD_CV,
         // Page 2
         PITCH, PITCH_CV,
-        BLEND_MODE,           // label first (left-to-right visual order): cycles WD→FB→RV
-        BLEND, BLEND_CV,      // value, then CV slot
+        FDB, FDB_CV,
         TEXTURE, TEXTURE_CV,
         MIX, MIX_CV,
-        FREEZE,               // DigitalInputMap; button opens input map editor
+        FREEZE,
         CURSOR_LENGTH,
     };
 
@@ -300,30 +267,27 @@ private:
     CVInputMap size_cv;
     int8_t  spray    = 20;  // 0–100% position scatter
     CVInputMap spray_cv;
+    int8_t  psprd    = 0;   // 0–100% pitch spread
+    CVInputMap psprd_cv;
     int8_t  pitch    = 0;   // −12 to +12 semitones
     CVInputMap pitch_cv;
-    int8_t  psprd    = 0;   // 0–100% pitch spread (hidden, persists)
-    CVInputMap psprd_cv;
-    int8_t  blend    = 80;  // 0–100% (meaning depends on blend_mode_)
-    CVInputMap blend_cv;
+    int8_t  fdb      = 0;   // 0–100% grain feedback
+    CVInputMap fdb_cv;
     int8_t  texture  = 50;  // 0–100% (0=rect, 50=tri, 100=Hann)
     CVInputMap texture_cv;
-    int8_t  mix      = 80;  // 0–100% output level
+    int8_t  mix      = 80;  // 0–100% wet/dry
     CVInputMap mix_cv;
     DigitalInputMap freeze_input;
 
-    BlendMode blend_mode_    = BLEND_FB;
-    bool      manual_freeze_ = false;  // latched by AuxButton
+    bool manual_freeze_ = false;  // latched by AuxButton
 
     // Per-channel DSP struct.
     struct MistierChannel {
-        static const uint8_t DRY_CH  = 0;
-        static const uint8_t WET_CH  = 1;
-        static const uint8_t VERB_CH = 2;
+        static const uint8_t DRY_CH = 0;
+        static const uint8_t WET_CH = 1;
 
-        AudioEffectClouds           grain_stream;
-        AudioEffectReverbSchroeder* reverb = nullptr;
-        AudioMixer<3>               mixer;
+        AudioEffectClouds grain_stream;
+        AudioMixer<2>     mixer;
 
         MistierChannel()
             : grain_stream(
@@ -335,27 +299,13 @@ private:
         void Start(HemisphereAudioApplet* owner, int ch,
                    AudioStream& input, AudioStream& output) {
             grain_stream.Acquire();
-            reverb = owner->GetBungverb();
-
-            owner->PatchCable(input,        ch, grain_stream, 0);
-            owner->PatchCable(input,        ch, mixer,        DRY_CH);
-            owner->PatchCable(grain_stream,  0, mixer,        WET_CH);
-            if (reverb) {
-                owner->PatchCable(grain_stream, 0, *reverb,  0);
-                owner->PatchCable(*reverb,       0, mixer,   VERB_CH);
-                reverb->setDecayTime(2.5f);
-                reverb->setDamping(0.5f);
-            }
-            owner->PatchCable(mixer, 0, output, ch);
+            owner->PatchCable(input,       ch, grain_stream, 0);
+            owner->PatchCable(input,       ch, mixer,        DRY_CH);
+            owner->PatchCable(grain_stream, 0, mixer,        WET_CH);
+            owner->PatchCable(mixer,        0, output,       ch);
         }
 
-        void Stop(HemisphereAudioApplet* owner) {
-            grain_stream.Release();
-            if (reverb) {
-                owner->ReleaseBungverb(reverb);
-                reverb = nullptr;
-            }
-        }
+        void Stop() { grain_stream.Release(); }
     } channels[Channels];
 
     AudioPassthrough<Channels> input_stream;
