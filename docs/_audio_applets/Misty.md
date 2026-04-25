@@ -22,7 +22,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Misty is a live granular audio processor for the Phazerville/Hemisphere audio applet framework. It continuously records incoming audio into a 1-second PSRAM circular buffer and plays it back as a cloud of overlapping grains.
 
-Inspired by Mutable Instruments Clouds, Misty extends the simpler [Mist](Mist.md) applet with:
+Inspired by Mutable Instruments Clouds, Misty extends the simpler Mist applet with:
 - Continuous grain window morphing (Texture)
 - Density centred at silence, with stochastic or periodic modes
 - Grain feedback — the granular output feeds back into the recording buffer
