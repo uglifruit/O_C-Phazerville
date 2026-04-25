@@ -3,6 +3,10 @@ layout: default
 ---
 # Mist — Live Granular Audio Processor
 
+> **Note:** Mist has been superseded by [Misty](Misty.md), which adds Texture morphing,
+> stochastic/periodic Density, grain Feedback, and Pitch Spread. Mist source is retained
+> for reference but is no longer included in the build.
+
 (TODO: screenshot)
 
 ## License

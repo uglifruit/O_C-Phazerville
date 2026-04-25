@@ -72,7 +72,7 @@ DMAMEM std::tuple<
   UpsampledApplet<MONO>,
   GlitchApplet<MONO>,
   MistierApplet<MONO>,
-  MistApplet<MONO>,
+  // MistApplet<MONO>,  // superseded by MistierApplet (Misty); source kept for reference
   AdvKrpsStrngApplet,
   ModalResonatorApplet<MONO>
 #ifndef USB_AUDIO

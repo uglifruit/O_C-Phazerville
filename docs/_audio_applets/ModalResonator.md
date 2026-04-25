@@ -49,7 +49,7 @@ Instruments Rings) rather than a simple harmonic series.
 | 0 | Negative stiffness — partials compressed **below** the fundamental, descending cluster |
 | ~3 | Stiffness ≈ 0 — true harmonic series: f, 2f, 3f, 4f … → string, organ |
 | 25 | Slightly stretched overtones → acoustic piano character |
-| 50 | Moderately stretched → marimba, wooden bars |
+| **50 (default)** | Moderately stretched → marimba, wooden bars |
 | 75 | Strongly inharmonic → steel tongue drum, bell plates |
 | 100 | Maximally stretched → bell, bowl, gong |
 

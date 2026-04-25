@@ -1,7 +1,7 @@
 ---
 layout: default
 ---
-# Mistier — Live Granular Audio Processor
+# Misty — Live Granular Audio Processor
 
 (TODO: screenshot)
 
@@ -20,9 +20,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Overview
 
-Mistier is a live granular audio processor for the Phazerville/Hemisphere audio applet framework. It continuously records incoming audio into a 1-second PSRAM circular buffer and plays it back as a cloud of overlapping grains.
+Misty is a live granular audio processor for the Phazerville/Hemisphere audio applet framework. It continuously records incoming audio into a 1-second PSRAM circular buffer and plays it back as a cloud of overlapping grains.
 
-Inspired by Mutable Instruments Clouds, Mistier extends the simpler [Mist](Mist.md) applet with:
+Inspired by Mutable Instruments Clouds, Misty extends the simpler [Mist](Mist.md) applet with:
 - Continuous grain window morphing (Texture)
 - Density centred at silence, with stochastic or periodic modes
 - Grain feedback — the granular output feeds back into the recording buffer
@@ -82,7 +82,7 @@ All parameters except Frz accept CV modulation via assignable CV inputs.
 
 ## CV / Gate Inputs
 
-Each parameter (except Frz and Blend mode) has an assignable CV input slot. Frz accepts a gate/digital input. Assign inputs using the in-applet CV input editor (press button when cursor is on a CV label).
+Each parameter (except Frz) has an assignable CV input slot. Frz accepts a gate/digital input. Assign inputs using the in-applet CV input editor (press button when cursor is on a CV label).
 
 ---
 
@@ -139,7 +139,6 @@ A row of pixels at the top of the display (y=7) shows active grain count in real
 - Grains: up to 12 simultaneous grains. Output scaled by 0.25 for headroom.
 - Interpolation: Hermite cubic interpolation on grain read pointer.
 - Window morph: implemented via a 256-entry Q15 Hann LUT in flash — no trigonometric functions in the audio hot loop.
-- Reverb: Schroeder/Moorer architecture (4 comb + 2 allpass), shared with BungverbApplet.
 
 ---
 

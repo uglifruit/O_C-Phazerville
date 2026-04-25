@@ -255,7 +255,7 @@ private:
 
     // Parameters
     int16_t pitch      = 1 * 12 * 128;  // C4 default
-    int8_t  structure  = 0;             // 0=harmonic, 100=inharmonic
+    int8_t  structure  = 50;            // 0=harmonic, 100=inharmonic
     int8_t  brightness = 70;            // mode amplitude taper
     int8_t  damping    = 50;            // decay time
     int8_t  position   = 25;            // excitation point
