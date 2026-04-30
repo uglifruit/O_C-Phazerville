@@ -64,17 +64,7 @@ jobs:
       with:
         tag_name: UGLIALL-latest
         name: UGLIALL Latest
-        body: |
-          Latest firmware build from the UGLIALL branch.
-
-          **Audio applets (T41 only):**
-          - FMDrum, Glitch, Mist (granular), AdvKrpsStrng (Karplus-Strong)
-          - WavRecorder — SD card WAV recorder; 1 MB PSRAM ring buffer if PSRAM present, 64 KB internal RAM fallback otherwise (T41 only, not T41+audio)
-
-          **CV applets:**
-          - MarkoV, MarkovPerc (sequencers)
-
-          Built from ${{ github.sha }}
+        body_path: .github/UGLIALL-release-notes.md
         prerelease: true
         make_latest: true
         files: software/*.hex
