@@ -40,7 +40,7 @@ using namespace HS;
 #include "Cumulus.h"
 #include "CVRecV2.h"
 #include "Calculate.h"
-#include "CatBool.h"
+#include "TruthCat5.h"
 #include "Calibr8.h"
 #include "Carpeggio.h"
 #ifdef PEWPEWPEW
@@ -164,7 +164,7 @@ constexpr Registry reg = Registry<HemisphereApplet, 200 // max ID
     , DeclareApplet<Burst, 31, 0x04>
     , DeclareApplet<Button, 65, 0x10>
     , DeclareApplet<Calculate, 12, 0x10>
-    , DeclareApplet<CatBool, 84, 0x46>
+    , DeclareApplet<TruthCat5, 84, 0x46>
     , DeclareApplet<Calibr8, 88, 0x10>
     , DeclareApplet<Carpeggio, 32, 0x0a>
 #ifdef PEWPEWPEW
