@@ -10,7 +10,8 @@ Custom Phazerville firmware by Andy Jenkinson (uglifruit), branched from [djphaz
 
 | Applet | Description |
 |--------|-------------|
-| **TruthCat4** | Catalan Boolean Gate — truth-table rhythm generator using all 14 parse trees of A NOR/NAND B NOR/NAND C NOR/NAND D NOR/NAND E. 16 operator patterns × 14 bracketings = 224 distinct rhythms. |
+| **TruthCat3** | Catalan Boolean Gate (C₃) — truth-table rhythm generator using all 5 parse trees of A NOR/NAND B NOR/NAND C NOR/NAND D. 8 operator patterns × 5 bracketings = 40 distinct rhythms. 16-step cycle. |
+| **TruthCat4** | Catalan Boolean Gate (C₄) — truth-table rhythm generator using all 14 parse trees of A NOR/NAND B NOR/NAND C NOR/NAND D NOR/NAND E. 16 operator patterns × 14 bracketings = 224 distinct rhythms. 32-step cycle. |
 | **MarkoV** | Markov chain melodic generator — 5 weighted tendency profiles (Stability, Tension, Jazz, Glacial, Drone), CV chaos control, seed/reset system, V/Oct transpose. |
 | **MarkovPerc** | Markov chain rhythm generator — 4 hit types (rest, hit, flam, ratchet), 4 style profiles (Steady, Syncopated, Jazz, Sparse), accent CV output, density CV input. |
 
