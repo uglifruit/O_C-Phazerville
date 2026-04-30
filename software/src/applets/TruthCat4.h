@@ -19,7 +19,7 @@
 // SOFTWARE.
 
 /*
- * TruthCat5 — Catalan Boolean Gate
+ * TruthCat4 — Catalan Boolean Gate
  *
  * Truth-table rhythm generator based on the 14 Catalan binary parse trees
  * of the expression A op0 B op1 C op2 D op3 E, where each operator is
@@ -30,10 +30,10 @@
  * TR2 = mode    CV2 = tree select  OUT2 = related gate
  */
 
-class TruthCat5 : public HemisphereApplet {
+class TruthCat4 : public HemisphereApplet {
 public:
 
-    enum TruthCat5Cursor {
+    enum TruthCat4Cursor {
         OPS,
         STEPS,
         TREE,
@@ -56,7 +56,7 @@ public:
     static constexpr int OPS_CV_CTRL      = 16; // sentinel: ops under CV control
     static constexpr int TREE_CV_CTRL     = 14; // sentinel: tree under CV control
 
-    const char* applet_name() { return "TruthCat5"; }
+    const char* applet_name() { return "TruthCat4"; }
     const uint8_t* applet_icon() { return PhzIcons::logic; }
 
     void Start() {

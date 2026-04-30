@@ -1,9 +1,9 @@
 ---
 layout: default
 ---
-# TruthCat5
+# TruthCat4
 
-**TruthCat5** is a truth-table rhythm generator based on chained NOR/NAND Boolean logic. It clocks through the rows of a 5-bit binary truth table and evaluates the expression **A op₀ B op₁ C op₂ D op₃ E** to produce gate outputs. What makes it unusual is that the same expression can be parenthesised 14 different ways (the Catalan number C₄ = 14), and each bracketing produces a different rhythm from the same inputs. CV1 selects the NOR/NAND operator mix; CV2 selects the bracketing.
+**TruthCat4** is a truth-table rhythm generator based on chained NOR/NAND Boolean logic. It clocks through the rows of a 5-bit binary truth table and evaluates the expression **A op₀ B op₁ C op₂ D op₃ E** to produce gate outputs. What makes it unusual is that the same expression can be parenthesised 14 different ways (the Catalan number C₄ = 14), and each bracketing produces a different rhythm from the same inputs. CV1 selects the NOR/NAND operator mix; CV2 selects the bracketing.
 
 ---
 
@@ -283,10 +283,10 @@ The cursor underline moves between the five editable parameters. When the Ops, T
 - **Hold mode for phrase locks:** TR2 in HLD mode lets you freeze the counter mid-phrase while keeping a gate high, then release to continue. Useful for stutter effects or to hold a specific row of the truth table while other modulation changes.
 - **Short step lengths for dense rhythms:** Steps = 3 or 4 gives very rapid cycling through a small set of truth-table rows. Different trees produce wildly different rhythms from these short windows because only a handful of input combinations are visited.
 - **Matching parse trees to operator density:** Tree 7 (balanced split) with high NAND density creates a characteristic "double trigger" rhythm because both halves of the split can independently evaluate true. Tree 1 with high NOR density creates long gaps broken by single triggers — the right-spine structure means any true value anywhere in the chain collapses the NOR cascade.
-- **Predictable reset points:** Because TruthCat5 is fully deterministic, a TR2 reset always returns to the same rhythm. Use RST mode to sync to other sequencers or to drop into a known groove at a section boundary.
+- **Predictable reset points:** Because TruthCat4 is fully deterministic, a TR2 reset always returns to the same rhythm. Use RST mode to sync to other sequencers or to drop into a known groove at a section boundary.
 
 ---
 
 ## Credits
 
-TruthCat5 by Andy Jenkinson / uglifruit, developed with Claude Code (Anthropic).
+TruthCat4 by Andy Jenkinson / uglifruit, developed with Claude Code (Anthropic).
