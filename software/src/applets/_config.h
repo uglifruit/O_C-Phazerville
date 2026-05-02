@@ -165,8 +165,6 @@ constexpr Registry reg = Registry<HemisphereApplet, 200 // max ID
     , DeclareApplet<Burst, 31, 0x04>
     , DeclareApplet<Button, 65, 0x10>
     , DeclareApplet<Calculate, 12, 0x10>
-    , DeclareApplet<TruthCat3, 85, 0x46>
-    , DeclareApplet<TruthCat4, 84, 0x46>
     , DeclareApplet<Calibr8, 88, 0x10>
     , DeclareApplet<Carpeggio, 32, 0x0a>
 #ifdef PEWPEWPEW
@@ -259,6 +257,8 @@ constexpr Registry reg = Registry<HemisphereApplet, 200 // max ID
 #endif
     , DeclareApplet<TrigSeq, 11, 0x06>
     , DeclareApplet<TrigSeq16, 25, 0x06>
+    , DeclareApplet<TruthCat3, 85, 0x46>
+    , DeclareApplet<TruthCat4, 84, 0x46>
     , DeclareApplet<Tuner, 39, 0x80>
     , DeclareApplet<TwoRings, 18, 0x02>
     , DeclareApplet<VectorEG, 52, 0x01>
