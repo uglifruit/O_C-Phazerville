@@ -79,8 +79,10 @@ DMAMEM std::tuple<
   MistierApplet<MONO>,
   AdvKrpsStrngApplet,
   ModalResonatorApplet<MONO>
-  // WTVCOApplet: RAM1 budget exceeded (~26KB over with LTO); FLASHMEM annotations
-  // have no effect under LTO. Needs upstream resolution or a linker script change.
+  // WTVCOApplet: RAM1 budget exceeded (~26KB over with LTO); FLASHMEM + no-lto
+  // attributes have no effect — slim LTO (-fno-fat-lto-objects) inlines at
+  // link time. Switching to fat LTO requires patching the framework build script.
+  // Needs upstream resolution or a linker script change.
 #ifndef USB_AUDIO
   , WavRecorderApplet<MONO>
 #endif
