@@ -1,12 +1,14 @@
 #pragma once
 
+#include "../Audio/AudioSynthTableOsc.h"
+
 class WTVCOApplet : public HemisphereAudioApplet {
 public:
     const char* applet_name() override {
         return "WTVCO";
     }
 
-    void Start() override {
+    __attribute__((noinline, section(".flashmem"))) void Start() override {
         bool sd_ready = CheckSD();
 
         waveform[A] = WAVE_SINE;
@@ -14,9 +16,8 @@ public:
         waveform[C] = WAVE_PULSE;
         for (int w = A; w <= C; ++w) GenerateWaveTable(w);
 
-        synth.arbitraryWaveform(wavetable[OUT], AUDIO_SAMPLE_RATE_EXACT / 2);
+        synth.setTable(wavetable[OUT]);
         synth.amplitude(1.0f);
-        synth.begin(WAVEFORM_ARBITRARY);
 
         vca_cv.Acquire();
         vca_cv.Method(INTERPOLATION_LINEAR);
@@ -31,7 +32,7 @@ public:
         mixer.gain(1, 1.0f);
     }
 
-    void Unload() override {
+    __attribute__((noinline, section(".flashmem"))) void Unload() override {
         AllowRestart();
     }
 
@@ -64,7 +65,7 @@ public:
         mixer.gain(0, 1.0f - m);
     }
 
-    void View() override {
+    __attribute__((noinline, section(".flashmem"))) void View() override {
         if (cursor > WAVEFORM_LAST) {
             DrawParams();
         } else {
@@ -75,7 +76,7 @@ public:
         gfxDisplayInputMapEditor();
     }
 
-    void OnButtonPress() override {
+    __attribute__((noinline, section(".flashmem"))) void OnButtonPress() override {
         userwave_select = false;
         if (cursor == PARAM_OSC_DIRECTION) {
             osc_rev = !osc_rev;
@@ -91,7 +92,7 @@ public:
         CursorToggle();
     }
 
-    void AuxButton() {
+    __attribute__((noinline, section(".flashmem"))) void AuxButton() {
         if (cursor > WAVEFORM_OUT && cursor <= WAVEFORM_LAST) {
             const int idx = cursor - WAVEFORM_A;
             if (waveform[idx] == WAVE_NOISE) noise_freeze = !noise_freeze;  // toggle "realtime" or frozen noise wave buffer
@@ -100,7 +101,7 @@ public:
         }
     }
 
-    void OnEncoderMove(int direction) override {
+    __attribute__((noinline, section(".flashmem"))) void OnEncoderMove(int direction) override {
         if (!EditMode()) {
             MoveCursor(cursor, direction, CURSOR_LAST);
             return;
@@ -166,7 +167,7 @@ public:
         }
     }
 
-    void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
+    __attribute__((noinline, section(".flashmem"))) void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(pitch, wt_blend, pulse_duty);
         data[1] = PackPackables(level, mix);
         data[2] = PackPackables(pitch_cv, wt_blend_cv, pulse_duty_cv);
@@ -174,7 +175,7 @@ public:
         data[4] = PackPackables(waveform[A], waveform[B], waveform[C]);
     }
 
-    void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
+    __attribute__((noinline, section(".flashmem"))) void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], pitch, wt_blend, pulse_duty);
         UnpackPackables(data[1], level, mix);
         UnpackPackables(data[2], pitch_cv, wt_blend_cv, pulse_duty_cv);
@@ -197,7 +198,7 @@ public:
     };
 
 protected:
-    void SetHelp() override {}
+    FLASHMEM void SetHelp() override {}
 
 private:
     enum WTVCO_Cursor {
@@ -250,7 +251,7 @@ private:
     CVInputMap mix_cv;
 
     AudioPassthrough<MONO> input_stream;
-    AudioSynthWaveform synth;
+    AudioSynthTableOsc synth;
     InterpolatingStream<> vca_cv;
     AudioVCA vca;
     AudioMixer<2> mixer;
@@ -284,14 +285,14 @@ private:
     static constexpr uint8_t X_DIV = 64 / 4;
     static constexpr uint8_t Y_DIV = (64 - HEADER_HEIGHT) / 4;
 
-    void gfxRenderWave(const int w) {
+    __attribute__((noinline, section(".flashmem"))) void gfxRenderWave(const int w) {
         for (int x = 0; x < WT_SIZE; x += 4) {
             uint8_t y = 44 - Proportion(wavetable[w][x], 32767, 16);
             gfxPixel(x / 4, y);
         }
     }
 
-    void DrawSelector() {
+    __attribute__((noinline, section(".flashmem"))) void DrawSelector() {
         uint8_t x = 0;
         uint8_t y = HEADER_HEIGHT + 1;
         uint8_t w = X_DIV;
@@ -303,7 +304,7 @@ private:
         else return;
     }
 
-    void DrawBlendicator(int b) {
+    __attribute__((noinline, section(".flashmem"))) void DrawBlendicator(int b) {
         const uint8_t y = 2 * HEADER_HEIGHT;
         const uint8_t h = 2;
         uint8_t x =  1 + X_DIV * (1 + (b / 128)) + ((b / 64) % 2) * Proportion(b - (64 * (b / 64)), 63, X_DIV);
@@ -311,7 +312,7 @@ private:
         gfxRect(x, y, w, h);
     }
 
-    void DrawWaveMenu() {
+    __attribute__((noinline, section(".flashmem"))) void DrawWaveMenu() {
         uint8_t x = 3;
         uint8_t y = MENU_ROW;
         if (!EditMode() || cursor == WAVEFORM_OUT) {
@@ -340,7 +341,7 @@ private:
         }
     }
 
-    void DrawScope() {
+    __attribute__((noinline, section(".flashmem"))) void DrawScope() {
         switch(cursor) {
             case WAVEFORM_A:
             case WAVEFORM_B:
@@ -356,7 +357,7 @@ private:
         gfxDottedLine(0, 63, 63, 63, 4U);
     }
 
-    void DrawParams() {
+    __attribute__((noinline, section(".flashmem"))) void DrawParams() {
         switch(cursor) {
             case PARAM_OCTAVE:
             case PARAM_PITCH:
@@ -448,7 +449,7 @@ private:
         wt[sample] = static_cast<int16_t>(random(-32768, 32768));
     }
 
-    void GenerateWaveTable(const int w) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveTable(const int w) {
         switch(waveform[w]) {
             case WAVE_SINE:
                 GenerateWaveForm_Sine(wavetable[w]);
@@ -483,14 +484,14 @@ private:
     }
 
 // WAVEFORM GENERATORS:
-    void GenerateWaveForm_Sine(int16_t* waveform) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveForm_Sine(int16_t* waveform) {
         for (int i = 0; i < WT_SIZE; ++i) {
             q15_t phase = static_cast<q15_t>(i * 32768 / WT_SIZE);
             waveform[i] = arm_sin_q15(phase);
         }
     }
 
-    void GenerateWaveForm_Triangle(int16_t* waveform) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveForm_Triangle(int16_t* waveform) {
         int value = 0;
         for (int i = 0; i < WT_SIZE; ++i) {  // theres probably a cleaner way to do this but i want a full wave period starting at 0
             if (i < (WT_SIZE >> 2))
@@ -504,28 +505,28 @@ private:
         }
     }
 
-    void GenerateWaveForm_Pulse(int16_t* waveform) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveForm_Pulse(int16_t* waveform) {
         int half = WT_SIZE / 2;
         for (int i = 0; i < WT_SIZE; ++i) {
             waveform[i] = (i < half) ? 32767 : -32768;
         }
     }
 
-    void GenerateWaveForm_Sawtooth(int16_t* waveform) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveForm_Sawtooth(int16_t* waveform) {
         for (int i = 0; i < WT_SIZE; ++i) {
             int value = ((WT_SIZE - i - 1) * 65536) / WT_SIZE;
             waveform[i] = static_cast<int16_t>(value - 32768);
         }
     }
 
-    void GenerateWaveForm_Ramp(int16_t* waveform) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveForm_Ramp(int16_t* waveform) {
         for (int i = 0; i < WT_SIZE; ++i) {
             int value = (i * 65536) / WT_SIZE;
             waveform[i] = static_cast<int16_t>(value - 32768);
         }
     }
 
-    void GenerateWaveForm_Stepped(int16_t* waveform) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveForm_Stepped(int16_t* waveform) {
         const int steps = 5;
         const int stepSize = WT_SIZE / steps;
         for (int i = 0; i < WT_SIZE; ++i) {
@@ -534,7 +535,7 @@ private:
         }
     }
 
-    void GenerateWaveForm_RandStepped(int16_t* waveform) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveForm_RandStepped(int16_t* waveform) {
         const int steps = 5;
         const int stepSize = WT_SIZE / steps;
         int currentStep = -1;
@@ -549,23 +550,23 @@ private:
         }
     }
 
-    void GenerateWaveForm_Noise(int16_t* waveform) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveForm_Noise(int16_t* waveform) {
         for (int i = 0; i < WT_SIZE; ++i) {
             waveform[i] = static_cast<int16_t>(random(-32768, 32768));
         }
     }
 
-    void GenerateWaveForm_User(int16_t* waveform) {
+    __attribute__((noinline, section(".flashmem"))) void GenerateWaveForm_User(int16_t* waveform) {
         GenerateWaveForm_Sine(waveform);
         // if(!SD.begin(BUILTIN_SDCARD)) GenerateWaveForm_Sine(waveform);
         // else GenerateWaveForm_Sawtooth(waveform);  // SelectUserWaveform()
     }
 
-    void SelectUserWaveForm(int* waveform, int dir) {
+    __attribute__((noinline, section(".flashmem"))) void SelectUserWaveForm(int* waveform, int dir) {
 
     }
 
-    bool CheckSD() {
+    __attribute__((noinline, section(".flashmem"))) bool CheckSD() {
         int fileCount = 0;
         bool wtvcoReady = false;
 
@@ -599,7 +600,7 @@ private:
         return wtvcoReady;
     }
 
-    bool isRawFile(const char* name) {
+    __attribute__((noinline, section(".flashmem"))) bool isRawFile(const char* name) {
         const char* ext = strrchr(name, '.');
         return ext && strcasecmp(ext, ".raw") == 0;
     }

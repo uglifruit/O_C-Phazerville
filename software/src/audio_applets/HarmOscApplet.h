@@ -12,7 +12,7 @@ public:
     static constexpr float detune_resolution = 256.0f;
     static constexpr float amplitude_resolution = 255.0f;
 
-    void Start() override {
+    FLASHMEM void Start() override {
         vca_cv.Acquire();
         vca_cv.Method(INTERPOLATION_LINEAR);
         vca.rectify(true);
@@ -26,7 +26,7 @@ public:
         InitWaveform(amplitudes, partial_ratios, max_partials);
     }
 
-    void Unload() override {
+    FLASHMEM void Unload() override {
         vca_cv.Release();
         AllowRestart();
     }
@@ -60,7 +60,7 @@ public:
         mixer.gain(0, 1.0f - m);
     }
 
-    void View() override {
+    FLASHMEM void View() override {
         gfxIcon(4 + 00, 26, NOTE_ICON);  // pitch
         gfxIcon(4 + 16, 26, PhzIcons::speaker);  // level
         gfxIcon(4 + 32, 26, BEAKER_ICON);  // mix
@@ -152,7 +152,7 @@ public:
 #define HARMOSC_PARAMS \
     pitch, level, mix
 
-    void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataRequest(std::array<uint64_t, CONFIG_SIZE>& data) override {
         data[0] = PackPackables(HARMOSC_PARAMS);
         data[1] = PackPackables(pitch_cv, level_cv);
         data[2] = PackPackables(mix_cv);
@@ -161,7 +161,7 @@ public:
         // }
     }
 
-    void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
+    FLASHMEM void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], HARMOSC_PARAMS);
         UnpackPackables(data[1], pitch_cv, level_cv);
         UnpackPackables(data[2], mix_cv);
@@ -170,7 +170,7 @@ public:
         // }
     }
 
-    void OnButtonPress() override {
+    FLASHMEM void OnButtonPress() override {
         if (CheckEditInputMapPress(cursor,
             IndexedInput(PITCH_CV, pitch_cv),
             IndexedInput(MIX_CV, mix_cv),
@@ -180,7 +180,7 @@ public:
         CursorToggle();
     }
 
-    void OnEncoderMove(int direction) override {
+    FLASHMEM void OnEncoderMove(int direction) override {
         if (!EditMode()) {
             MoveCursor(cursor, direction, PARTIAL16);
             return;
@@ -220,7 +220,7 @@ public:
         }
     }
 
-    void AuxButton() {
+    FLASHMEM void AuxButton() {
         if (cursor >= PARTIAL1) partial_detune = !partial_detune;
     }
 
@@ -231,7 +231,7 @@ public:
         return &mixer;
     }
 
-    void InitWaveform(int* amp, int* rat, int n_partials) {
+    FLASHMEM void InitWaveform(int* amp, int* rat, int n_partials) {
         for (int i = 0; i < n_partials; ++i) { // approximate saw wave
             amp[i] = 255 / (i + 1);
             rat[i] = 256 * (i + 1);
@@ -239,7 +239,7 @@ public:
     }
 
 protected:
-    void SetHelp() override {}
+    FLASHMEM void SetHelp() override {}
 
 private:
     enum Cursor : int8_t {

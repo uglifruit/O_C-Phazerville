@@ -79,7 +79,8 @@ DMAMEM std::tuple<
   MistierApplet<MONO>,
   AdvKrpsStrngApplet,
   ModalResonatorApplet<MONO>
-  // WTVCOApplet excluded: code size pushes RAM1 over budget (WIP upstream)
+  // WTVCOApplet: RAM1 budget exceeded (~26KB over with LTO); FLASHMEM annotations
+  // have no effect under LTO. Needs upstream resolution or a linker script change.
 #ifndef USB_AUDIO
   , WavRecorderApplet<MONO>
 #endif
