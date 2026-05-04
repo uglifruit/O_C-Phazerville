@@ -146,7 +146,7 @@ public:
                 gfxStartCursor();
                 gfxPrint(MODE_NAMES[mode]);
                 gfxEndCursor(cursor == MODE);
-                gfxStartCursor(49, y);
+                gfxStartCursor(48, y);
                 gfxPrint(mode_cv);
                 gfxEndCursor(cursor == MODE_CV, false, mode_cv.InputName());
                 break;
@@ -155,7 +155,7 @@ public:
                 gfxStartCursor(25, y);
                 graphics.printf("%2d", ratchet);
                 gfxEndCursor(cursor == RATCHET);
-                gfxStartCursor(49, y);
+                gfxStartCursor(48, y);
                 gfxPrint(ratchet_cv);
                 gfxEndCursor(cursor == RATCHET_CV, false, ratchet_cv.InputName());
                 break;
@@ -164,7 +164,7 @@ public:
                 gfxStartCursor(25, y);
                 graphics.printf("%2d", bits_);
                 gfxEndCursor(cursor == BITS);
-                gfxStartCursor(49, y);
+                gfxStartCursor(48, y);
                 gfxPrint(bits_cv);
                 gfxEndCursor(cursor == BITS_CV, false, bits_cv.InputName());
                 break;
@@ -173,7 +173,7 @@ public:
                 gfxStartCursor(25, y);
                 graphics.printf("%2d", decimate_);
                 gfxEndCursor(cursor == DECIMATE);
-                gfxStartCursor(49, y);
+                gfxStartCursor(48, y);
                 gfxPrint(dec_cv);
                 gfxEndCursor(cursor == DECIMATE_CV, false, dec_cv.InputName());
                 break;
@@ -182,7 +182,7 @@ public:
                 gfxStartCursor(25, y);
                 graphics.printf("%2d", offset_);
                 gfxEndCursor(cursor == OFFSET);
-                gfxStartCursor(49, y);
+                gfxStartCursor(48, y);
                 gfxPrint(off_cv);
                 gfxEndCursor(cursor == OFFSET_CV, false, off_cv.InputName());
                 break;
@@ -191,7 +191,7 @@ public:
                 gfxStartCursor(25, y);
                 graphics.printf("%3d%%", mix);
                 gfxEndCursor(cursor == MIX);
-                gfxStartCursor(49, y);
+                gfxStartCursor(48, y);
                 gfxPrint(mix_cv);
                 gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
                 break;
