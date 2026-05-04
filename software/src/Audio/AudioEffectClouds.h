@@ -110,6 +110,13 @@ public:
             }
         }
 
+        // ── Advance per-slot position LFOs once per block (~0.3 Hz) ──────────────
+        static constexpr float POS_LFO_RATE = 0.3f * AUDIO_BLOCK_SAMPLES / AUDIO_SAMPLE_RATE_EXACT;
+        for (int i = 0; i < MAX_GRAINS; i++) {
+            pos_lfo_[i] += POS_LFO_RATE;
+            if (pos_lfo_[i] >= 1.0f) pos_lfo_[i] -= 1.0f;
+        }
+
         // ── Pass 1: grain scheduling ───────────────────────────────────────────
         // density=0 → no grains. neg → periodic. pos → stochastic (random advance).
         if (cur_density != 0.0f) {
@@ -217,6 +224,14 @@ private:
     // Grain scheduling state (audio ISR only — not volatile).
     float spawn_phase_ = 0.0f;
 
+    // Per-slot position LFO — slowly drifts each grain's spawn offset so concurrent grains
+    // never all start from the exact same buffer position. Initialised spread across [0,1).
+    // Advance rate: ~0.3 Hz per block. Wander depth: spray × 0.1 s of buffer.
+    float pos_lfo_[MAX_GRAINS] = {
+        0.0f/12, 1.0f/12, 2.0f/12, 3.0f/12,  4.0f/12,  5.0f/12,
+        6.0f/12, 7.0f/12, 8.0f/12, 9.0f/12, 10.0f/12, 11.0f/12
+    };
+
     // Volatile params: written from Controller() ISR, read from audio interrupt.
     volatile float pos_      = 0.5f;
     volatile float density_  = 0.0f;  // −1..+1 (0=silence)
@@ -232,8 +247,9 @@ private:
                     float cur_pitch, float cur_psprd, float cur_texture,
                     size_t buf_size) {
         Grain* g = nullptr;
-        for (auto& gr : grains) {
-            if (!gr.active) { g = &gr; break; }
+        int slot = -1;
+        for (int i = 0; i < MAX_GRAINS; i++) {
+            if (!grains[i].active) { g = &grains[i]; slot = i; break; }
         }
         if (!g) return; // all slots busy
 
@@ -246,8 +262,13 @@ private:
         if (eff_pos > 1.0f) eff_pos = 1.0f;
 
         // Absolute start position: pos=0 → write head (live), pos=1 → oldest.
-        float rptr = (float)g_buffer.GetWriteIx() - (float)buf_size * eff_pos;
+        // Add slow per-slot LFO wander so concurrent grains drift apart over time.
+        // Wander depth: spray × 0.1 s (max ≈ 0.1 × AUDIO_SAMPLE_RATE at full spray).
+        float lfo_wander = arm_sin_f32(pos_lfo_[slot] * (2.0f * M_PI))
+                           * cur_spray * 0.1f * AUDIO_SAMPLE_RATE_EXACT;
+        float rptr = (float)g_buffer.GetWriteIx() - (float)buf_size * eff_pos + lfo_wander;
         if (rptr < 0.0f) rptr += (float)buf_size;
+        if (rptr >= (float)buf_size) rptr -= (float)buf_size;
 
         size_t glen = (size_t)(cur_size * AUDIO_SAMPLE_RATE_EXACT);
         if (glen < (size_t)AUDIO_BLOCK_SAMPLES) glen = AUDIO_BLOCK_SAMPLES;

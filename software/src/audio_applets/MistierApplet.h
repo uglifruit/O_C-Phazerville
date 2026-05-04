@@ -32,13 +32,20 @@ public:
     const char* applet_name() override { return "Misty"; }
 
     void Start() override {
+        verb_ = GetFreeverb();
+        if (verb_) {
+            verb_->roomsize(0.5f);
+            verb_->damping(0.6f);
+        }
         for (int ch = 0; ch < Channels; ch++) {
-            channels[ch].Start(this, ch, input_stream, output_stream);
+            channels[ch].Start(this, ch, input_stream, output_stream, verb_);
         }
     }
 
     void Unload() override {
         for (auto& ch : channels) ch.Stop();
+        ReleaseFreeverb(verb_);
+        verb_ = nullptr;
         AllowRestart();
     }
 
@@ -59,15 +66,21 @@ public:
         float eff_psprd_raw   = constrain(0.01f * psprd + psprd_cv.InF(), 0.0f, 1.0f);
         float eff_psprd_semis = 12.0f * eff_psprd_raw * eff_psprd_raw;
 
-        // Feedback and wet/dry.
+        // Feedback, wet/dry, and reverb.
         float eff_feedback = constrain(0.01f * fdb + fdb_cv.InF(), 0.0f, 1.0f);
         float eff_mix      = constrain(0.01f * mix + mix_cv.InF(), 0.0f, 1.0f);
+        float eff_rvb      = constrain(0.01f * rvb + rvb_cv.InF(), 0.0f, 1.0f);
 
         // Freeze: hardware gate OR manual latch.
         bool frozen = freeze_input.Gate() || manual_freeze_;
 
         float dry_gain, wet_gain;
         EqualPowerFade(dry_gain, wet_gain, eff_mix);
+
+        if (verb_) {
+            verb_->roomsize(0.5f + eff_rvb * 0.45f);   // room: 0.5–0.95
+            verb_->damping(0.6f - eff_rvb * 0.3f);      // damp: 0.3–0.6 (brighter at high Rvb)
+        }
 
         for (int ch = 0; ch < Channels; ch++) {
             channels[ch].grain_stream.setPosition(eff_pos);
@@ -125,10 +138,11 @@ public:
             gfxStartCursor(); graphics.printf("%3d%%", psprd); gfxEndCursor(cursor == PSPRD);
             gfxStartCursor(); gfxPrint(psprd_cv); gfxEndCursor(cursor == PSPRD_CV, false, psprd_cv.InputName());
         } else {
-            // ── Page 2: Pitch, Fdb, Tex, Mix, Frz (y=15/25/35/45/55) ────────
+            // ── Page 2: Pitch, Fdb, Rvb, Tex, Mix, Frz (y=13/20/27/34/41/48) ─
+            // 7px row pitch to fit 6 rows in 48 lines (13..55 inclusive).
 
             // Pitch
-            gfxPrint(1, 15, "Pt:");
+            gfxPrint(1, 13, "Pt:");
             gfxStartCursor();
             if (pitch >= 0) graphics.printf("+%2d", pitch);
             else            graphics.printf("%3d", pitch);
@@ -136,23 +150,28 @@ public:
             gfxStartCursor(); gfxPrint(pitch_cv); gfxEndCursor(cursor == PITCH_CV, false, pitch_cv.InputName());
 
             // Feedback
-            gfxPrint(1, 25, "Fdb:");
+            gfxPrint(1, 20, "Fdb:");
             gfxStartCursor(); graphics.printf("%3d%%", fdb); gfxEndCursor(cursor == FDB);
             gfxStartCursor(); gfxPrint(fdb_cv); gfxEndCursor(cursor == FDB_CV, false, fdb_cv.InputName());
 
+            // Reverb
+            gfxPrint(1, 27, "Rvb:");
+            gfxStartCursor(); graphics.printf("%3d%%", rvb); gfxEndCursor(cursor == RVB);
+            gfxStartCursor(); gfxPrint(rvb_cv); gfxEndCursor(cursor == RVB_CV, false, rvb_cv.InputName());
+
             // Texture
-            gfxPrint(1, 35, "Tex:");
+            gfxPrint(1, 34, "Tex:");
             gfxStartCursor(); graphics.printf("%3d%%", texture); gfxEndCursor(cursor == TEXTURE);
             gfxStartCursor(); gfxPrint(texture_cv); gfxEndCursor(cursor == TEXTURE_CV, false, texture_cv.InputName());
 
             // Mix
-            gfxPrint(1, 45, "Mix:");
+            gfxPrint(1, 41, "Mix:");
             gfxStartCursor(); graphics.printf("%3d%%", mix); gfxEndCursor(cursor == MIX);
             gfxStartCursor(); gfxPrint(mix_cv); gfxEndCursor(cursor == MIX_CV, false, mix_cv.InputName());
 
             // Freeze — label inverts while manual latch is active (print first, then invert)
-            gfxPrint(1, 55, "Frz:");
-            if (manual_freeze_) gfxInvert(1, 55, 20, 8);
+            gfxPrint(1, 48, "Frz:");
+            if (manual_freeze_) gfxInvert(1, 48, 20, 8);
             gfxStartCursor(); gfxPrint(freeze_input); gfxEndCursor(cursor == FREEZE, true, freeze_input.InputName());
         }
 
@@ -178,6 +197,7 @@ public:
                 IndexedInput(PSPRD_CV,    psprd_cv),
                 IndexedInput(PITCH_CV,    pitch_cv),
                 IndexedInput(FDB_CV,      fdb_cv),
+                IndexedInput(RVB_CV,      rvb_cv),
                 IndexedInput(TEXTURE_CV,  texture_cv),
                 IndexedInput(MIX_CV,      mix_cv),
                 IndexedInput(FREEZE,      freeze_input)
@@ -208,6 +228,8 @@ public:
             case PITCH_CV:   pitch_cv.ChangeSource(direction);                    break;
             case FDB:        fdb     = constrain(fdb     + direction,   0, 100); break;
             case FDB_CV:     fdb_cv.ChangeSource(direction);                      break;
+            case RVB:        rvb     = constrain(rvb     + direction,   0, 100); break;
+            case RVB_CV:     rvb_cv.ChangeSource(direction);                      break;
             case TEXTURE:    texture = constrain(texture + direction,   0, 100); break;
             case TEXTURE_CV: texture_cv.ChangeSource(direction);                  break;
             case MIX:        mix     = constrain(mix     + direction,   0, 100); break;
@@ -222,14 +244,14 @@ public:
         data[0] = PackPackables(MISTIER_PARAMS);
         data[1] = PackPackables(pos_cv, density_cv, size_cv, spray_cv);
         data[2] = PackPackables(pitch_cv, fdb_cv, texture_cv, mix_cv);
-        data[3] = PackPackables(freeze_input, spray, psprd_cv);
+        data[3] = PackPackables(freeze_input, spray, psprd_cv, rvb, rvb_cv);
     }
 
     void OnDataReceive(const std::array<uint64_t, CONFIG_SIZE>& data) override {
         UnpackPackables(data[0], MISTIER_PARAMS);
         UnpackPackables(data[1], pos_cv, density_cv, size_cv, spray_cv);
         UnpackPackables(data[2], pitch_cv, fdb_cv, texture_cv, mix_cv);
-        UnpackPackables(data[3], freeze_input, spray, psprd_cv);
+        UnpackPackables(data[3], freeze_input, spray, psprd_cv, rvb, rvb_cv);
     }
 #undef MISTIER_PARAMS
 
@@ -250,6 +272,7 @@ private:
         // Page 2
         PITCH, PITCH_CV,
         FDB, FDB_CV,
+        RVB, RVB_CV,
         TEXTURE, TEXTURE_CV,
         MIX, MIX_CV,
         FREEZE,
@@ -273,6 +296,8 @@ private:
     CVInputMap pitch_cv;
     int8_t  fdb      = 0;   // 0–100% grain feedback
     CVInputMap fdb_cv;
+    int8_t  rvb      = 0;   // 0–100% post-grain reverb amount
+    CVInputMap rvb_cv;
     int8_t  texture  = 50;  // 0–100% (0=rect, 50=tri, 100=Hann)
     CVInputMap texture_cv;
     int8_t  mix      = 80;  // 0–100% wet/dry
@@ -280,6 +305,7 @@ private:
     DigitalInputMap freeze_input;
 
     bool manual_freeze_ = false;  // latched by AuxButton
+    AudioEffectFreeverb* verb_ = nullptr;  // acquired from shared pool; null if unavailable
 
     // Per-channel DSP struct.
     struct MistierChannel {
@@ -297,12 +323,18 @@ private:
         {}
 
         void Start(HemisphereAudioApplet* owner, int ch,
-                   AudioStream& input, AudioStream& output) {
+                   AudioStream& input, AudioStream& output,
+                   AudioEffectFreeverb* verb) {
             grain_stream.Acquire();
             owner->PatchCable(input,       ch, grain_stream, 0);
             owner->PatchCable(input,       ch, mixer,        DRY_CH);
             owner->PatchCable(grain_stream, 0, mixer,        WET_CH);
-            owner->PatchCable(mixer,        0, output,       ch);
+            if (verb) {
+                owner->PatchCable(mixer, 0, *verb, 0);
+                owner->PatchCable(*verb, 0, output, ch);
+            } else {
+                owner->PatchCable(mixer, 0, output, ch);
+            }
         }
 
         void Stop() { grain_stream.Release(); }

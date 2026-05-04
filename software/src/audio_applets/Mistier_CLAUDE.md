@@ -20,15 +20,15 @@ MistApplet is **unchanged and still present** alongside Mistier in the mono proc
 
 ```
 Input ──► AudioEffectClouds (grain_stream) ──► wet ──────────────────────────────►┐
-Input ──────────────────────────────────────────────────── dry ───────────────────►┤ AudioMixer<2> ──► Output
+Input ──────────────────────────────────────── dry ───────────────────────────────►┤ AudioMixer<2> ──► AudioEffectFreeverb ──► Output
 ```
 
 `MistierApplet<Channels>` is templated; currently only `MONO` is instantiated in `_config.h`
 (stereo not added to keep RAM1 pressure down).
 
-Reverb was deliberately removed — users can insert a reverb applet downstream in the processor
-chain instead. This frees one `bung_factory` slot (shared pool of 8 reverb instances) and
-reduces CPU load by one Schroeder/Moorer filter bank per block.
+`AudioEffectFreeverb` is acquired from the shared `verb_factory` pool in `HemisphereAudioApplet`
+via `GetFreeverb()`. Controlled by the `Rvb` param (0–100%) on page 2. If the pool is exhausted
+(returns nullptr), the applet falls back to a direct mixer→output connection (no reverb).
 
 ### MistierChannel struct
 
@@ -77,21 +77,22 @@ to exactly 0.0f, skipping all grain spawning and producing silence.
 
 ## UI Layer (MistierApplet)
 
-### Two-page layout (10px row spacing, y=15/25/35/45/55 on both pages)
+### Two-page layout
 
-| Page | Rows |
-|------|------|
-| 1 (`cursor < PITCH`) | Pos, Den, Sz, Spr, PSp |
-| 2 (`cursor >= PITCH`) | Pitch, Fdb, Tex, Mix, Frz |
+| Page | Rows | y positions |
+|------|------|-------------|
+| 1 (`cursor < PITCH`) | Pos, Den, Sz, Spr, PSp | y=15/25/35/45/55 (10px spacing) |
+| 2 (`cursor >= PITCH`) | Pt, Fdb, Rvb, Tex, Mix, Frz | y=13/20/27/34/41/48 (7px spacing) |
 
-Page 2 has five clean rows — no multi-cursor rows, no mode cycling.
+Page 2 has six rows at 7px pitch to accommodate the new Rvb row.
 
 ### Cursor enum (in order)
 
 ```
 Page 1: POS, POS_CV, DENSITY, DENSITY_CV, SIZE, SIZE_CV, SPRAY, SPRAY_CV,
         PSPRD, PSPRD_CV
-Page 2: PITCH, PITCH_CV, FDB, FDB_CV, TEXTURE, TEXTURE_CV, MIX, MIX_CV, FREEZE
+Page 2: PITCH, PITCH_CV, FDB, FDB_CV, RVB, RVB_CV, TEXTURE, TEXTURE_CV,
+        MIX, MIX_CV, FREEZE
 ```
 
 All page 2 cursors are symmetric: value cursor + CV cursor pairs, plus FREEZE (DigitalInputMap).
@@ -112,23 +113,21 @@ Latches/unlatches `manual_freeze_`.
 ### Data packing
 
 ```cpp
-data[0] = PackPackables(pos, density, size, texture, pitch, psprd, fdb, mix)
-data[1] = PackPackables(pos_cv, density_cv, size_cv, spray_cv)
-data[2] = PackPackables(pitch_cv, fdb_cv, texture_cv, mix_cv)
-data[3] = PackPackables(freeze_input, spray, psprd_cv)
+data[0] = PackPackables(pos, density, size, texture, pitch, psprd, fdb, mix)  // 8×8 = 64 bits
+data[1] = PackPackables(pos_cv, density_cv, size_cv, spray_cv)                 // 4×16 = 64 bits
+data[2] = PackPackables(pitch_cv, fdb_cv, texture_cv, mix_cv)                  // 4×16 = 64 bits
+data[3] = PackPackables(freeze_input, spray, psprd_cv, rvb, rvb_cv)            // 16+8+16+8+16 = 64 bits
 ```
 
 Note: `spray_cv` is in `data[1]`, `spray` value is in `data[3]`. `psprd` value is in
-`data[0]`, `psprd_cv` is in `data[3]`. `fdb`/`fdb_cv` replaced the old `blend`/`blend_cv`/
-`blend_mode_` at the same bit positions — `blend_mode_` byte has been dropped from data[3],
-shifting `spray` and `psprd_cv`. Old saves will reset spray to default (20) on first load.
+`data[0]`, `psprd_cv` is in `data[3]`. `rvb` and `rvb_cv` are appended at the end of `data[3]`.
 
 ---
 
 ## RAM1 Notes
 
 - Mono only — no stereo template. Adding `MistierApplet<STEREO>` would roughly halve remaining headroom.
-- RAM1 free after build: ~6.9 KB (T41 slot 0) — reverb removal should improve this slightly.
+- RAM1 free after build: ~6.9 KB (T41 slot 0). Position LFO adds 48 bytes (12 floats); reverb uses shared pool (no static RAM cost).
 - If RAM1 overflows: reduce `MAX_GRAINS` in `AudioEffectClouds.h`.
 
 ---
@@ -138,5 +137,7 @@ shifting `spray` and `psprd_cv`. Old saves will reset spray to default (20) on f
 - `density = 50` → exactly 0 Hz → silence. Default is 75. Never reset this to 50 as a "neutral" default.
 - `hann_lut_` is `const` (not `constexpr`) — ends up in `.rodata` (flash). On AVR this would need
   `PROGMEM`; on Teensy 4.1 (IMXRT, von Neumann) `const` is sufficient.
-- No reverb in this applet. If you need reverb, add BungverbApplet downstream in the processor chain.
+- `rvb = 0` default means no reverb on first load — intentional. Start dry and dial in.
 - `fdb = 0` default means no feedback on first load — intentional, avoids surprising runaway on startup.
+- If `GetFreeverb()` returns nullptr (all 8 pool slots in use), the applet operates without reverb silently.
+- Reverb `roomsize` maps to 0.5–0.95; `damping` maps 0.6→0.3 as Rvb increases (brighter reverb at high amounts).
