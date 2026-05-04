@@ -99,32 +99,32 @@ The four operator slots correspond to the four positions in the expression:
 A  op0  B  op1  C  op2  D  op3  E
 ```
 
-Each slot is independently NOR or NAND. Displayed as a four-character string where **O** = NOR and **A** = NAND (avoiding N which is ambiguous). For example:
+Each slot is independently NOR or NAND. Displayed as a four-character string where **&darr;** = NOR and **&uarr;** = NAND (avoiding N which is ambiguous). For example:
 
-- `OOOO` = all NOR — sparsest; fires only when all relevant inputs are false
+- `&darr;&darr;&darr;&darr;` = all NOR — sparsest; fires only when all relevant inputs are false
 - `AAAA` = all NAND — densest; fires unless all relevant inputs are true
-- `AOOA` = NAND at the outer positions, NOR in the middle
+- `A&darr;&darr;A` = NAND at the outer positions, NOR in the middle
 
 The 16 patterns are ordered by increasing NAND count:
 
 | Index | Pattern | NANDs |
 |-------|---------|-------|
-| 0 | `OOOO` | 0 |
-| 1 | `AOOO` | 1 |
-| 2 | `OAOO` | 1 |
-| 3 | `OOAO` | 1 |
-| 4 | `OOOA` | 1 |
-| 5 | `AAOO` | 2 |
-| 6 | `AOAO` | 2 |
-| 7 | `AOOA` | 2 |
-| 8 | `OAAO` | 2 |
-| 9 | `OAOA` | 2 |
-| 10 | `OOAA` | 2 |
-| 11 | `AAAO` | 3 |
-| 12 | `AAOA` | 3 |
-| 13 | `AOAA` | 3 |
-| 14 | `OAAA` | 3 |
-| 15 | `AAAA` | 4 |
+| 0 | &darr;&darr;&darr;&darr; | 0 |
+| 1 | &uarr;&darr;&darr;&darr; | 1 |
+| 2 | &darr;&uarr;&darr;&darr; | 1 |
+| 3 | &darr;&darr;&uarr;&darr; | 1 |
+| 4 | &darr;&darr;&darr;&uarr; | 1 |
+| 5 | &uarr;&uarr;&darr;&darr; | 2 |
+| 6 | &uarr;&darr;&uarr;&darr; | 2 |
+| 7 | &uarr;&darr;&darr;&uarr; | 2 |
+| 8 | &darr;&uarr;&uarr;&darr; | 2 |
+| 9 | &darr;&uarr;&darr;&uarr; | 2 |
+| 10 | &darr;&darr;&uarr;&uarr; | 2 |
+| 11 | &uarr;&uarr;&uarr;&darr; | 3 |
+| 12 | &uarr;&uarr;&darr;&uarr; | 3 |
+| 13 | &uarr;&darr;&uarr;&uarr; | 3 |
+| 14 | &darr;&uarr;&uarr;&uarr; | 3 |
+| 15 | &uarr;&uarr;&uarr;&uarr; | 4 |
 
 Higher CV on CV1 pushes toward more NAND-heavy operator patterns. When Ops is set to **CV**, CV1 maps directly across all 16 patterns.
 
