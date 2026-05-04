@@ -99,7 +99,7 @@ The four operator slots correspond to the four positions in the expression:
 A  op0  B  op1  C  op2  D  op3  E
 ```
 
-Each slot is independently NOR or NAND. Displayed as a four-character string where **&darr;** = NOR and **&uarr;** = NAND (avoiding N which is ambiguous). For example:
+Each slot is independently NOR or NAND. Displayed as a four-character string where **&darr;** = NOR and **&uarr;** = NAND. For example:
 
 - `&darr;&darr;&darr;&darr;` = all NOR — sparsest; fires only when all relevant inputs are false
 - `AAAA` = all NAND — densest; fires unless all relevant inputs are true
