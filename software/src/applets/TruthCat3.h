@@ -335,8 +335,8 @@ private:
         gfxPrint(slash_x, 25, "/");
         gfxPrint(len_x, 25, slen);
         if (tree_base == TREE_CV_CTRL) {
-            gfxPrint(tree_x, 25, pad(10, tree_live + 1));
-            gfxPrint(tree_live + 1);
+            gfxPrint(tree_x, 25, "CV:");
+            gfxPrint(pad(10, tree_live + 1), tree_live + 1);
         } else {
             gfxPrint(tree_x, 25, "T:");
             gfxPrint(pad(10, tree_base + 1), tree_base + 1);
