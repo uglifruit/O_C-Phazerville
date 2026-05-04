@@ -109,22 +109,22 @@ The 16 patterns are ordered by increasing NAND count:
 
 | Index | Pattern | NANDs |
 |-------|---------|-------|
-| 0 | `&darr;&darr;&darr;&darr;` | 0 |
-| 1 | `&uarr;&darr;&darr;&darr;` | 1 |
-| 2 | `&darr;&uarr;&darr;&darr;` | 1 |
-| 3 | `&darr;&darr;&uarr;&darr;` | 1 |
-| 4 | `&darr;&darr;&darr;&uarr;` | 1 |
-| 5 | `&uarr;&uarr;&darr;&darr;` | 2 |
-| 6 | `&uarr;&darr;&uarr;&darr;` | 2 |
-| 7 | `&uarr;&darr;&darr;&uarr;` | 2 |
-| 8 | `&darr;&uarr;&uarr;&darr;` | 2 |
-| 9 | `&darr;&uarr;&darr;&uarr;` | 2 |
-| 10 | `&darr;&darr;&uarr;&uarr;` | 2 |
-| 11 | `&uarr;&uarr;&uarr;&darr;` | 3 |
-| 12 | `&uarr;&uarr;&darr;&uarr;` | 3 |
-| 13 | `&uarr;&darr;&uarr;&uarr;` | 3 |
-| 14 | `&darr;&uarr;&uarr;&uarr;` | 3 |
-| 15 | `&uarr;&uarr;&uarr;&uarr;` | 4 |
+| 0 | &darr;&darr;&darr;&darr; | 0 |
+| 1 | &uarr;&darr;&darr;&darr; | 1 |
+| 2 | &darr;&uarr;&darr;&darr; | 1 |
+| 3 | &darr;&darr;&uarr;&darr; | 1 |
+| 4 | &darr;&darr;&darr;&uarr; | 1 |
+| 5 | &uarr;&uarr;&darr;&darr; | 2 |
+| 6 | &uarr;&darr;&uarr;&darr; | 2 |
+| 7 | &uarr;&darr;&darr;&uarr; | 2 |
+| 8 | &darr;&uarr;&uarr;&darr; | 2 |
+| 9 | &darr;&uarr;&darr;&uarr; | 2 |
+| 10 | &darr;&darr;&uarr;&uarr; | 2 |
+| 11 | &uarr;&uarr;&uarr;&darr; | 3 |
+| 12 | &uarr;&uarr;&darr;&uarr; | 3 |
+| 13 | &uarr;&darr;&uarr;&uarr; | 3 |
+| 14 | &darr;&uarr;&uarr;&uarr; | 3 |
+| 15 | &uarr;&uarr;&uarr;&uarr; | 4 |
 
 Higher CV on CV1 pushes toward more NAND-heavy operator patterns. When Ops is set to **CV**, CV1 maps directly across all 16 patterns.
 
