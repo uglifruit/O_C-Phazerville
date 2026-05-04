@@ -92,19 +92,19 @@ The three operator slots correspond to the three positions in the expression:
 ```
 A  op0  B  op1  C  op2  D
 ```
+Each slot is independently NOR or NAND. Displayed as a three-character string where **&darr;** = NOR and **&uarr;** = NAND. For example:
 
-Displayed as a three-character string where **O** = NOR and **A** = NAND:
 
 | Index | Pattern | NANDs |
 |-------|---------|-------|
-| 0 | `OOO` | 0 |
-| 1 | `AOO` | 1 |
-| 2 | `OAO` | 1 |
-| 3 | `OOA` | 1 |
-| 4 | `AAO` | 2 |
-| 5 | `AOA` | 2 |
-| 6 | `OAA` | 2 |
-| 7 | `AAA` | 3 |
+| 0 | &darr;&darr;&darr; | 0 |
+| 1 | &uarr;&darr;&darr; | 1 |
+| 2 | &darr;&uarr;&darr; | 1 |
+| 3 | &darr;&darr;&uarr; | 1 |
+| 4 | &uarr;&uarr;&darr; | 2 |
+| 5 | &uarr;&darr;&uarr; | 2 |
+| 6 | &darr;&uarr;&uarr; | 2 |
+| 7 | &uarr;&uarr;&uarr; | 3 |
 
 Higher CV on CV1 pushes toward more NAND-heavy patterns. When Ops is set to **CV**, CV1 maps directly across all 8 patterns.
 
