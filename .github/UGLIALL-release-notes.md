@@ -10,6 +10,7 @@ Custom Phazerville firmware by Andy Jenkinson (uglifruit), branched from [djphaz
 
 | Applet | Description |
 |--------|-------------|
+| **A-Mish** | Interval-based MIDI melodic sequencer inspired by the Eventide Misha. MIDI notes navigate a quantizer scale by diatonic degree jumps rather than playing absolute pitches. White keys step through the scale; black keys add a chromatic semitone nudge. CV1 = semitone transpose, CV2 = quantizer channel offset. |
 | **TruthCat3** | Catalan Boolean Gate (C₃) — truth-table rhythm generator using all 5 parse trees of A NOR/NAND B NOR/NAND C NOR/NAND D. 8 operator patterns × 5 bracketings = 40 distinct rhythms. 16-step cycle. |
 | **TruthCat4** | Catalan Boolean Gate (C₄) — truth-table rhythm generator using all 14 parse trees of A NOR/NAND B NOR/NAND C NOR/NAND D NOR/NAND E. 16 operator patterns × 14 bracketings = 224 distinct rhythms. 32-step cycle. |
 | **MarkoV** | Markov chain melodic generator — 5 weighted tendency profiles (Stability, Tension, Jazz, Glacial, Drone), CV chaos control, seed/reset system, V/Oct transpose. |
@@ -29,15 +30,9 @@ Custom Phazerville firmware by Andy Jenkinson (uglifruit), branched from [djphaz
 
 ---
 
-## Build Variants
+## Flashing
 
-Three `.hex` files are produced per build:
-
-| File | Description |
-|------|-------------|
-| `T41.hex` | Standard Teensy 4.1 build — all CV applets, all audio applets |
-| `T41_audio.hex` | Teensy 4.1 with dedicated audio board |
-| `T41_MTP.hex` | Teensy 4.1 with MTP (USB file transfer for SD card access) |
+One multiboot `.hex` file is produced per build, named `o_C-phazerville-<version>-<sha>.hex`. Flash it with Teensy Loader as normal — it packages all three firmware slots (standard, audio, MTP) and the Teensy bootloader selects the right one at startup.
 
 ---
 
