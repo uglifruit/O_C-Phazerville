@@ -20,6 +20,7 @@ using namespace HS;
 
 #include "ADSREG.h"
 #include "ADEG.h"
+#include "AMish.h"
 #include "ASR.h"
 #include "AttenuateOffset.h"
 #include "Binary.h"
@@ -136,6 +137,7 @@ using namespace HS;
 constexpr Registry reg = Registry<HemisphereApplet, HS::APPLET_SLOTS
     , DeclareApplet<ADSREG, 8, CAT_MODULATOR>
     , DeclareApplet<ADEG, 34, CAT_MODULATOR>
+    , DeclareApplet<AMish, 95, CAT_MIDI | CAT_SEQUENCER>
     , DeclareApplet<MiniASR, 47, CAT_MODULATOR | CAT_QUANTIZER>
     , DeclareApplet<AttenuateOffset, 56, CAT_UTILITY>
     , DeclareApplet<Binary, 41, CAT_LOGIC | CAT_MODULATOR>
